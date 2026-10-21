@@ -1,13 +1,13 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.1.5';
+  const revision = '0.1.6';
   // SDK absolute mode estimates y=0 as ground; this is not a detected plane mesh.
   const groundSettings = {planeHeight: 0, screenX: 0.5, screenY: 0.5,
     minimumCameraHeight: 0.15, normalSeconds: 1};
   const ui = {};
   ['start', 'place', 'replace', 'recenter', 'stop', 'status', 'phase', 'guidance',
-    'progress', 'loading', 'metrics', 'download', 'dimensions', 'reticle'].forEach(function (id) {
+    'progress', 'loading', 'metrics', 'download', 'dimensions', 'reticle', 'coaching'].forEach(function (id) {
     ui[id] = document.getElementById(id);
   });
   const canvas = document.getElementById('camera-canvas');
@@ -52,6 +52,7 @@
   const state = {
     phase: 'loading', engineReady: false, unity: null, registered: false, modulesAdded: false,
     config: null, latest: null, lastPoseAt: 0, sequence: 0, normalSince: 0,
+    recognition: null, recognitionHistory: [], motionPermission: [],
     candidate: null, stableOrigin: null, stableMean: null, stableCount: 0,
     stableSince: 0, lastHitAt: 0, lastHitCheck: 0,
     placed: false, pendingAt: 0, startedAt: 0, lastReport: null, firstNormalAt: 0,
@@ -302,6 +303,79 @@
     return reality.trackingStatus === 'NORMAL' && reality.trackingReason !== 'INITIALIZING';
   }
 
+  function beginRecognition(reason) {
+    if (state.recognition) {
+      state.recognitionHistory.push(state.recognition);
+      if (state.recognitionHistory.length > 4) state.recognitionHistory.shift();
+    }
+    const clock = now();
+    state.startedAt = clock;
+    state.firstNormalAt = 0;
+    state.normalSince = 0;
+    state.latest = null;
+    state.lastPoseAt = 0;
+    state.lastTracking = '';
+    state.recognition = {reason: reason, startedAt: new Date().toISOString(),
+      startedClock: clock, updates: 0, invalidPoses: 0, trackingCounts: {},
+      firstPoseSeconds: null, firstNormalSeconds: null, firstSample: null,
+      firstNormalSample: null, samples: [], lastSampleClock: 0,
+      sdkCoaching: 'not-received', motion: {events: 0, lastEventSeconds: null,
+        maxRotationRate: null, maxAcceleration: null}};
+    record('recognition-start', {reason: reason});
+  }
+
+  function observeRecognition(reality, poseValid, clock) {
+    const stats = state.recognition;
+    if (!stats) return;
+    stats.updates++;
+    if (!poseValid) stats.invalidPoses++;
+    const elapsed = (clock - stats.startedClock) / 1000;
+    const status = reality ? String(reality.trackingStatus) + '/' + String(reality.trackingReason) : 'no-reality';
+    stats.trackingCounts[status] = (stats.trackingCounts[status] || 0) + 1;
+    if (poseValid && stats.firstPoseSeconds === null) stats.firstPoseSeconds = elapsed;
+    const firstNormal = poseValid && trackingNormal(reality) && stats.firstNormalSeconds === null;
+    if (firstNormal) stats.firstNormalSeconds = elapsed;
+    if (!firstNormal && stats.lastSampleClock && clock - stats.lastSampleClock < 750) return;
+    stats.lastSampleClock = clock;
+    const ray = poseValid ? screenRay(reality) : null;
+    const height = poseValid ? reality.position.y - groundSettings.planeHeight : null;
+    const sample = {seconds: elapsed, tracking: status, poseValid: poseValid,
+      sdkCamera: poseValid ? copyPoint(reality.position) : null,
+      sdkHeight: height,
+      aimDownDegrees: ray ? Math.asin(Math.max(-1, Math.min(1, -ray.y))) * 180 / Math.PI : null,
+      estimatedGroundDistance: ray && ray.y < -1e-5 && height > 0 ? -height / ray.y : null,
+      motionEvents: stats.motion.events};
+    if (!stats.firstSample) stats.firstSample = sample;
+    if (firstNormal) {
+      stats.firstNormalSample = sample;
+      record('recognition-normal', sample);
+    }
+    stats.samples.push(sample);
+    if (stats.samples.length > 120) stats.samples.shift();
+  }
+
+  function sdkCoaching(value) {
+    if (state.recognition) state.recognition.sdkCoaching = value;
+    record('sdk-coaching', value);
+  }
+
+  window.addEventListener('devicemotion', function (event) {
+    if (state.phase !== 'running' || !state.recognition) return;
+    const motion = state.recognition.motion;
+    motion.events++;
+    motion.lastEventSeconds = (now() - state.recognition.startedClock) / 1000;
+    const rotation = event.rotationRate;
+    if (rotation && finite(rotation.alpha) && finite(rotation.beta) && finite(rotation.gamma)) {
+      const rate = Math.hypot(rotation.alpha, rotation.beta, rotation.gamma);
+      motion.maxRotationRate = Math.max(motion.maxRotationRate || 0, rate);
+    }
+    const acceleration = event.acceleration;
+    if (pointValid(acceleration)) {
+      const amount = Math.hypot(acceleration.x, acceleration.y, acceleration.z);
+      motion.maxAcceleration = Math.max(motion.maxAcceleration || 0, amount);
+    }
+  }, {passive: true});
+
   function groundReason(reason, clock) {
     state.ground.reason = reason;
     if (reason !== state.ground.lastReason && clock - state.ground.lastEventAt >= 2000) {
@@ -433,13 +507,15 @@
         if (!finite(reality.intrinsics[i])) { projectionValid = false; break; }
       }
     }
-    if (!reality || !pointValid(reality.position) || !quatValid(reality.rotation) || !projectionValid) {
+    const clock = now();
+    const poseValid = !!(reality && pointValid(reality.position) && quatValid(reality.rotation) && projectionValid);
+    observeRecognition(reality, poseValid, clock);
+    if (!poseValid) {
       frame[1] = 0; frame[2] = 0;
       state.normalSince = 0;
       resetCandidate();
       return;
     }
-    const clock = now();
     state.latest = reality;
     state.lastPoseAt = clock;
     const normal = trackingNormal(reality);
@@ -479,6 +555,10 @@
       XR8.XrController.pipelineModule(),
       {
         name: 'unity-floor-probe',
+        listeners: [
+          {event: 'coaching-overlay.show', process: function () { sdkCoaching('show'); }},
+          {event: 'coaching-overlay.hide', process: function () { sdkCoaching('hide'); }}
+        ],
         onStart: function (result) {
           destroyManualRenderer();
           xrGl = result.GLctx;
@@ -491,12 +571,11 @@
           state.viewportHeight = result.canvasHeight;
           setProjection(result.canvasWidth, result.canvasHeight);
           state.phase = 'running';
-          state.startedAt = now();
-          state.firstNormalAt = 0;
+          beginRecognition('camera-start');
           record('camera-start', {width: result.canvasWidth, height: result.canvasHeight,
             cameraFeed: Object.assign({}, state.cameraFeed), browserRendering: browserRendering()});
           scheduleView('camera-started');
-          message('地面を推定しています。', '床を映したまま端末をゆっくり前後・左右に動かし、枠が出たら同じ場所を少し映し続けてください。');
+          message('立ったまま、床を映してください。', '胸元の高さで床へ斜めに向け、端末を前へ出して手元へ戻します。向きを変えるだけでなく、位置を動かしてください。');
           updateUi();
         },
         onUpdate: onUpdate,
@@ -513,6 +592,7 @@
           state.normalSince = 0;
           setProjection(result.canvasWidth, result.canvasHeight);
           XR8.XrController.recenter();
+          beginRecognition('viewport-reset');
           record('viewport-reset', {width: result.canvasWidth, height: result.canvasHeight});
         },
         onCameraStatusChange: function (result) {
@@ -532,6 +612,8 @@
       if (type && typeof type.requestPermission === 'function') requests.push(type.requestPermission());
     });
     const results = await Promise.all(requests);
+    state.motionPermission = results.slice();
+    record('motion-permission', {results: results, browserPromptAvailable: requests.length > 0});
     if (results.some(function (value) { return value !== 'granted'; }))
       throw new Error('モーションの利用が許可されませんでした。Safariのサイト設定を確認してください。');
   }
@@ -557,7 +639,7 @@
         XR8.resume();
         XR8.XrController.recenter();
         state.phase = 'running';
-        state.normalSince = 0;
+        beginRecognition('resume');
         record('resume', 'Placement cleared; rescan required.');
       } else {
         XR8.run({canvas: canvas, webgl2: true, ownRunLoop: true,
@@ -587,6 +669,9 @@
     const normal = fresh && frame[2] > 0.5;
     const ready = normal && !state.placed && !state.pendingAt && frame[35] > 0.5
       && now() - state.lastHitAt < 300;
+    const initializing = running && !normal && !state.firstNormalAt;
+    const recognitionSeconds = state.recognition ? (now() - state.recognition.startedClock) / 1000 : 0;
+    ui.coaching.hidden = !initializing || state.cameraOnly;
     document.body.classList.toggle('active', running);
     document.body.classList.toggle('placed', state.placed);
     document.body.classList.toggle('ready', ready);
@@ -615,7 +700,11 @@
     if (running) {
       if (state.cameraOnly)
         message('現実のカメラ映像だけを確認しています。', '現実の映像が見えるか確認してください。見えなければ「映像の再描画を試す」を押してください。');
-      else if (!normal) message('空間の追跡を安定させています。', '床を映したまま、端末をゆっくり前後に動かしてください。認識中は表示を隠します。');
+      else if (initializing && recognitionSeconds >= 20)
+        message('認識に時間がかかっています。', '立ったまま、明るく模様のある床へ向けて前後にゆっくり動かしてください。白一色や反射する場所は避け、別の床も映してください。');
+      else if (initializing)
+        message('立ったまま、端末を前へ出して戻してください。', '胸元の高さで床へ斜めに向け、20〜30cmほどゆっくり前後に動かします。認識できたら動きを止めます。');
+      else if (!normal) message('空間の追跡を安定させています。', '立ったまま床を映し、端末をゆっくり前後に動かしてください。');
       else if (state.placed && state.placementMode === 'display-check')
         message('床判定を使わない表示確認中です。', '仮キャラクターが見えるか確認してください。この結果は床認識の成功を意味しません。');
       else if (state.placed) message('推定地面に配置しました。', '実際の床と足元が合うか、黄色の枠が1mかを確認してください。まだ実寸と固定精度の評価中です。');
@@ -624,8 +713,11 @@
       else if (state.candidate) message('同じ場所を少し映し続けてください。', '配置位置が安定するとボタンが有効になります。');
       else if (state.ground.reason === 'look-down')
         message('照準を足元寄りの床へ向けてください。', '照準が推定地面へ届くと、配置用の小さい枠が出ます。');
-      else if (state.ground.reason === 'outside-distance-range')
-        message('配置できる距離の外を向いています。', '床の少し近い場所へ照準を向け直してください。距離の初期値は0.4〜4mです。');
+      else if (state.ground.reason === 'outside-distance-range') {
+        if (state.ground.distance > state.config.maximumDistance)
+          message('端末の高さを保ち、もう少し下を向けてください。', 'スマホを床に近づけず、手前の床へ照準を向けます。高い位置では、より下向きにすると届きやすくなります。');
+        else message('床の少し遠い場所へ照準を向けてください。', '端末の高さを保ち、照準を少し前へ動かしてください。');
+      }
       else if (state.ground.reason === 'camera-below-estimated-ground')
         message('地面の推定がまだ安定していません。', '明るく模様のある床を映してゆっくり移動し、続く場合は「認識し直す」を押してください。');
       else message('照準を置きたい床へ向けてください。', 'この版はSDKの推定地面を使います。実際の床への一致と実寸はこれから確認します。');
@@ -658,7 +750,11 @@
       'フレーム: ' + state.sequence,
       'AR解像度: ' + canvas.width + ' × ' + canvas.height,
       '初回追跡まで: ' + (state.firstNormalAt && state.startedAt
-        ? ((state.firstNormalAt - state.startedAt) / 1000).toFixed(1) + '秒' : '—')
+        ? ((state.firstNormalAt - state.startedAt) / 1000).toFixed(1) + '秒' : '—'),
+      '今回の認識経過: ' + recognitionSeconds.toFixed(1) + '秒',
+      'モーション許可: ' + JSON.stringify(state.motionPermission),
+      'モーション受信: ' + (state.recognition ? state.recognition.motion.events : 0),
+      '初期認識のサンプル: ' + (state.recognition ? state.recognition.samples.length : 0)
     ];
     if (position) lines.push('XR座標: ' + [position.x, position.y, position.z].map(function (v) { return v.toFixed(3); }).join(', '));
     if (unityPosition) lines.push('Unity座標: ' + [unityPosition.x, unityPosition.y, unityPosition.z].map(function (v) { return v.toFixed(3); }).join(', '));
@@ -742,6 +838,7 @@
     frame[1] = 0; frame[2] = 0;
     state.normalSince = 0;
     XR8.XrController.recenter();
+    beginRecognition('user-recenter');
     record('recenter', 'World origin reset; placement cleared.');
     updateUi();
   });
@@ -755,6 +852,8 @@
       hitType: state.hitType, unity: state.lastReport, error: state.error,
       placementMode: state.placementMode, surfaceDiagnostics: state.surface,
       groundSettings: groundSettings, groundDiagnostics: state.ground,
+      recognitionDiagnostics: state.recognition, recognitionHistory: state.recognitionHistory.slice(),
+      motionPermission: state.motionPermission,
       cameraOnly: state.cameraOnly, manualBackground: state.manualBackground,
       cameraFeed: state.cameraFeed, browserRendering: browserRendering(), viewHistory: viewHistory.slice(),
       cameraPose: state.latest ? {position: copyPoint(state.latest.position),
