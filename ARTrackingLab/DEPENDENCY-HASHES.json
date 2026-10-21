@@ -1,0 +1,128 @@
+[
+  {
+    "file": "vendor/xr/LICENSE",
+    "bytes": 15994,
+    "sha256": "ed166ff1e5002cd7557f2c595a2398b092e76481070e6bc3b253e51517f3ae61",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/dom-tablet-button.glb",
+    "bytes": 38236,
+    "sha256": "69bb197329b5382906360a58e8a00995dae958667dbe93b002cb51068bfefda6",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/dom-tablet-frame.glb",
+    "bytes": 43028,
+    "sha256": "ceb73d8655c544b8fe0c60fdf7de9a6c5e20ed9410e5c412f325b183360ed9ed",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/face-ear-model.tflite",
+    "bytes": 1173520,
+    "sha256": "4cd07c3ecc4ac3a19097ad5d8e2920113e8786d29302e48064b5e21b9f828552",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/face-mesh-model.tflite",
+    "bytes": 2495920,
+    "sha256": "97cd5b1d16d1d205445134d0d8882a619068c1a49277652c468049d0fc7f2756",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/face-model.tflite",
+    "bytes": 423340,
+    "sha256": "0d800dd37230bb0503e2bc84ce547a1328dc0e2d8c54a5a92df953710decc4ed",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/media-worker.js",
+    "bytes": 4995543,
+    "sha256": "db47c89ca2ec7d9eba75e114c195896c74c7b0ff888ce2970dfd9bd8bdfeda8d",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/powered-by.svg",
+    "bytes": 6056,
+    "sha256": "4c8bf13771807ac55c963fc08421f611e6e1ab37d5410dc0bbf049f94bea0797",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/semantics-model.tflite",
+    "bytes": 2526160,
+    "sha256": "b25bebe3ec1b7390feec937d1e4eafb3d6f2104d584a738c0bdf6486030b70a0",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/resources/semantics-worker.js",
+    "bytes": 4998145,
+    "sha256": "7db219a04051354c20d0fbe16333236ba0b49054fbe985a334b49817032da45e",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/xr-face.js",
+    "bytes": 7676552,
+    "sha256": "43b3966b709871bf64216d31983e472693f21d1846bc5c52d014c0e132dc3a65",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/xr-slam.js",
+    "bytes": 5538007,
+    "sha256": "398f675c920892afd4521d5196df2b6b8a1b8a90b6a5c749cf5ad1a6e0a85270",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/xr/xr.js",
+    "bytes": 1036695,
+    "sha256": "b3973936862f4cb77ae32d24f253d8a0e8b1de4fa2a0cf688833742889ee829d",
+    "source": "Same unmodified distribution as ARRollCapture/DEPENDENCY-HASHES.json"
+  },
+  {
+    "file": "vendor/three.module.js",
+    "source": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js",
+    "bytes": 1274691,
+    "sha256": "a97ec6852978949b7941c070b81292b842473a37549222353fa0a70c18d7285a"
+  },
+  {
+    "file": "vendor/THREE-LICENSE.txt",
+    "source": "https://cdn.jsdelivr.net/npm/three@0.164.0/LICENSE",
+    "bytes": 1081,
+    "sha256": "4c40a1ef62450b857c3b2aaf294936304cd552d965fbcd9d32d4c5bcf4ba4454"
+  },
+  {
+    "file": "vendor/ar-threex.mjs",
+    "source": "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.8/three.js/build/ar-threex.mjs",
+    "bytes": 1618782,
+    "sha256": "6c9aa037be052f9741defe725bc3d22b01c8ba09500a41796a11f6417eb6fd34"
+  },
+  {
+    "file": "vendor/ARJS-LICENSE.txt",
+    "source": "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.8/LICENSE",
+    "bytes": 1062,
+    "sha256": "a1f95e66eddf8634d15c6a743e292a88dd56eca8cc23c33f923c01b0af5c752f"
+  },
+  {
+    "file": "vendor/ARTOOLKIT-LICENSE.txt",
+    "source": "https://unpkg.com/@ar-js-org/artoolkit5-js@0.3.2/LICENSE",
+    "bytes": 46081,
+    "sha256": "a59f57ae5f7bd7e46815c935a90d7e2f2606fa69d9123c98ba3eed409d7e2a3f"
+  },
+  {
+    "file": "vendor/camera_para.dat",
+    "source": "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.8/data/data/camera_para.dat",
+    "bytes": 176,
+    "sha256": "dc0487240de94aafab0f6106c6d9faf79b70f22de0faf3281d341e33edd777ed"
+  },
+  {
+    "file": "vendor/patt.hiro",
+    "source": "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.8/data/data/patt.hiro",
+    "bytes": 12484,
+    "sha256": "749618e935cd1ddc715acc77da1bcd7687a6d5dbc64e1f943a1e10fd6596e516"
+  },
+  {
+    "file": "marker/hiro.png",
+    "source": "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.8/data/images/hiro.png",
+    "bytes": 115515,
+    "sha256": "310b3fac7f71c702966831ff271213da67c358cd0fbb982cc7db174d8a9e2710"
+  }
+]

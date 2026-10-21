@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-10-21T15:49:01.214Z",
+  "runtimeTestsPerformed": false,
+  "unityBuildPerformed": false,
+  "syntaxChecked": 7,
+  "dependencyFilesVerified": 21,
+  "unchangedGameFiles": 154,
+  "localHtmlReferencesVerified": 20,
+  "largestDependencyBytes": 7676552,
+  "notes": [
+    "Static syntax/reference/hash checks only.",
+    "No library, camera, browser, Unity or AR runtime executed."
+  ]
+}

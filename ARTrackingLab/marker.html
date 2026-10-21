@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>目印あり · AR比較</title><link rel="stylesheet" href="lab.css"><script type="importmap">{"imports":{"three":"./vendor/three.module.js","threex":"./vendor/ar-threex.mjs"}}</script></head>
+<body><canvas id="view"></canvas><header class="panel top"><p class="eyebrow">Roll-by-Blow · AR比較 0.1.0</p><h1>目印あり・追跡だけ</h1><p id="status">読み込み中…</p><p id="stats"></p><p id="error" role="alert"></p></header>
+<main class="panel bottom"><p>黒枠の外幅 <input id="marker-width" type="number" min="5" max="40" value="12" step="0.1" inputmode="decimal"> cm · <a href="marker/print.html" target="_blank" rel="noopener">印刷用</a></p>
+<p id="hint">紙を机に平らに置き、黒枠全体を映してください。印刷後の黒い四角の外幅を測り、上の値へ入力して開始します。</p>
+<div class="actions"><button id="start" disabled>開始</button><button id="stop" disabled>終了</button><button id="save">診断を保存</button></div><p><a href="index.html">比較一覧へ</a></p>
+<details><summary>確認方法</summary><p>前傾→元の持ち方へ。見失ったら立体を隠します。発見後20秒で自動終了します。印刷サイズやカメラ補正の誤差があるため、正確な実寸は保証しません。</p></details></main>
+<script src="boot.js"></script><script type="module" src="marker.js"></script></body></html>

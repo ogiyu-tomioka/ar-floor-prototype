@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>目印なし · AR比較</title><link rel="stylesheet" href="lab.css"><script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script></head>
+<body><canvas id="view"></canvas><div id="cross"></div>
+<header class="panel top"><p class="eyebrow">Roll-by-Blow · AR比較 0.1.0</p><h1>目印なし・追跡だけ</h1><p id="status">読み込み中…</p><p id="stats"></p><p id="error" role="alert"></p></header>
+<main class="panel bottom"><p id="hint">机を映して開始。認識後に「基準を固定」を押すと、視線の先へ立体を仮置きします。机面の検出は行いません。</p>
+<div class="actions"><button id="start" disabled>開始</button><button id="anchor" disabled>基準を固定</button><button id="stop" disabled>終了</button></div>
+<div class="actions"><button id="save">診断を保存</button><a href="index.html">比較一覧へ</a></div>
+<details><summary>確認方法・比較設定</summary><p>位置をほぼ変えず、前傾→元の持ち方へ。固定後20秒で自動終了します。SDK標準ループを使う短い比較であり、省電力性能の比較ではありません。</p><p><a href="world.html?scale=responsive">responsive縮尺で別確認</a> · <a href="world.html">absolute縮尺（通常）</a></p></details></main>
+<script src="boot.js"></script><script type="module" src="world.js"></script></body></html>

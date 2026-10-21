@@ -1,0 +1,144 @@
+{
+  "sourceFile": "1-ar-floor-diagnostic-2026-10-21T15-20-40-519Z.json",
+  "sourceSha256": "9a25d7d1b693d516e5bc4b79b80d94931bc5f8f6aa0dad81ea9da6cd9fb2071c",
+  "player": "0.3.2",
+  "savedPhase": "stopped",
+  "arBudget": {
+    "mode": "budget",
+    "targetFps": 30,
+    "frames": 1424,
+    "measuredFps": 30,
+    "windowFrames": 9,
+    "windowStart": 56720
+  },
+  "placementRequests": 1,
+  "placement": {
+    "position": {
+      "x": -0.04139303309576852,
+      "y": 0.048326194286346436,
+      "z": -0.2973124292413039
+    },
+    "sizeMeters": 0.32941406342433766,
+    "surface": {
+      "reason": "ready",
+      "received": 308,
+      "visible": 244,
+      "inliers": 93,
+      "hullArea": 0.2864784753729111,
+      "stableSeconds": 0.801,
+      "planeY": 0.048326194286346436,
+      "sizeMeters": 0.32941406342433766,
+      "center": {
+        "x": -0.04139303309576852,
+        "y": 0.048326194286346436,
+        "z": -0.2973124292413039
+      }
+    }
+  },
+  "placementAt": "2026-10-21T15:20:08.431Z",
+  "firstBlockedAt": "2026-10-21T15:20:32.369Z",
+  "samples": [
+    {
+      "seconds": 12.745,
+      "position": {
+        "x": 0,
+        "y": 0.5655417442321777,
+        "z": 0
+      },
+      "distanceFromFixedAnchor": 0.5980133684759911,
+      "nativeBeta": 47.21012271749041,
+      "guard": "initializing",
+      "sdkVsDisplayedRotationDegrees": 0
+    },
+    {
+      "seconds": 18.896,
+      "position": {
+        "x": -0.02015082724392414,
+        "y": 0.6703475713729858,
+        "z": 0.15689918398857117
+      },
+      "distanceFromFixedAnchor": 0.7704998471480037,
+      "nativeBeta": 18.111369501963146,
+      "guard": "accepted",
+      "sdkVsDisplayedRotationDegrees": 0.19279616350053996
+    },
+    {
+      "seconds": 24.261,
+      "position": {
+        "x": -0.04951667785644531,
+        "y": 0.6061506867408752,
+        "z": -0.12429268658161163
+      },
+      "distanceFromFixedAnchor": 0.5840975854567253,
+      "nativeBeta": 10.122628437381325,
+      "guard": "accepted",
+      "sdkVsDisplayedRotationDegrees": 7.117720249059666
+    },
+    {
+      "seconds": 26.562,
+      "position": {
+        "x": 0.0033513284288346767,
+        "y": 1.135150671005249,
+        "z": -0.34440070390701294
+      },
+      "distanceFromFixedAnchor": 1.0887638893233713,
+      "nativeBeta": -1.286493019943925,
+      "guard": "accepted",
+      "sdkVsDisplayedRotationDegrees": 110.22883361058433
+    },
+    {
+      "seconds": 30.398,
+      "position": {
+        "x": 0.07217615842819214,
+        "y": 1.4242593050003052,
+        "z": -0.5277498960494995
+      },
+      "distanceFromFixedAnchor": 1.399711153249618,
+      "nativeBeta": -11.764157190182871,
+      "guard": "accepted",
+      "sdkVsDisplayedRotationDegrees": 11.864036368323477
+    },
+    {
+      "seconds": 41.866,
+      "position": {
+        "x": 0.17498353123664856,
+        "y": 1.6871044635772705,
+        "z": -0.17375564575195312
+      },
+      "distanceFromFixedAnchor": 1.6576125338083965,
+      "nativeBeta": -5.050011368387898,
+      "guard": "accepted",
+      "sdkVsDisplayedRotationDegrees": 85.98255870407789
+    },
+    {
+      "seconds": 42.634,
+      "position": {
+        "x": 0.1072087436914444,
+        "y": 1.9727118015289307,
+        "z": -0.06417395174503326
+      },
+      "distanceFromFixedAnchor": 1.944144028387816,
+      "nativeBeta": 22.266333713097037,
+      "guard": "outside-play-range",
+      "sdkVsDisplayedRotationDegrees": 50.96201435979261
+    },
+    {
+      "seconds": 47.199,
+      "position": {
+        "x": 0.09592065215110779,
+        "y": 2.045177459716797,
+        "z": 0.024468999356031418
+      },
+      "distanceFromFixedAnchor": 2.0272674495974656,
+      "nativeBeta": 18.695585733225,
+      "guard": "outside-play-range",
+      "sdkVsDisplayedRotationDegrees": 63.12833564546431
+    }
+  ],
+  "notes": [
+    "Recorded values, not independent physical measurements.",
+    "No runtime or Unity test performed.",
+    "stageScale=0 after stop is not evidence of live scale becoming zero.",
+    "Projection and live object scale were not logged every sample in 0.3.2."
+  ]
+}
