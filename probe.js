@@ -1,7 +1,9 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.3.1';
+  const revision = '0.3.2';
+  const cameraOrientation = window.RollCameraOrientation ? RollCameraOrientation() : null;
+  const sdkRotationOnly = new URLSearchParams(location.search).get('rotation') === 'sdk';
   const budgetArLoop = new URLSearchParams(location.search).get('xrloop') !== 'engine';
   const poseGuard = window.RollPoseGuard ? RollPoseGuard() : null;
   let arLoopId = 0, nextArFrame = 0, lastGuardEvent = 0, lastOrientationSample = 0;
@@ -18,7 +20,8 @@
     ui[id] = document.getElementById(id);
   });
   const canvas = document.getElementById('camera-canvas');
-  const frame = new Float32Array(38);
+  const frame = new Float32Array(39);
+  const legacyFrame = frame.subarray(0,38);
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 1);
   const events = [];
   const viewHistory = [];
@@ -298,6 +301,7 @@
     resetCandidate();
     if (tableEstimator) tableEstimator.reset();
     if (poseGuard) poseGuard.reset();
+    if (cameraOrientation) cameraOrientation.reset();
     configureWorldPoints(true);
   }
 
@@ -370,6 +374,7 @@
       unityTargetFrameRate: state.lastReport ? state.lastReport.targetFrameRate : null,
       unityVSyncCount: state.lastReport ? state.lastReport.vSyncCount : null,
       rotation: poseValid ? Object.assign({},reality.rotation) : null,
+      orientationCorrection:cameraOrientation ? cameraOrientation.snapshot() : null,
       deviceOrientation:deviceOrientation,poseGuard:poseGuard ? poseGuard.snapshot().reason : 'missing'};
     if (!stats.firstSample) stats.firstSample = sample;
     if (firstNormal) {
@@ -481,7 +486,10 @@
     frame[27] = fit.position.x; frame[28] = fit.position.y; frame[29] = fit.position.z;
     frame[30] = 0; frame[31] = 0; frame[32] = 0; frame[33] = 1;
     frame[34] = fit.distance;
-    frame[35] = fit.ready && clock - state.normalSince >= 1000 ? 1 : 0;
+    const orientationReady = !state.config.preferDeviceOrientation || sdkRotationOnly
+      || (cameraOrientation && cameraOrientation.snapshot().calibrated);
+    frame[35] = fit.ready && orientationReady && clock - state.normalSince >= 1000 ? 1 : 0;
+    if (!orientationReady) state.surface.reason = 'waiting-for-orientation';
     if (frame[35] > .5 && !state.pendingAt && !state.placed && !state.cameraOnly) {
       if (state.recognition && state.recognition.firstReadySeconds === null)
         state.recognition.firstReadySeconds = (clock - state.recognition.startedClock) / 1000;
@@ -527,10 +535,10 @@
   }
 
   window.addEventListener('deviceorientation', function (event) {
-    if (state.phase !== 'running' || now()-lastOrientationSample < 100) return;
+    if (state.phase !== 'running') return;
     lastOrientationSample = now();
     deviceOrientation = {alpha:event.alpha,beta:event.beta,gamma:event.gamma,
-      screenAngle:screen.orientation ? screen.orientation.angle : window.orientation,clock:now()};
+      screenAngle:screen.orientation ? screen.orientation.angle : window.orientation,absolute:event.absolute,clock:now()};
   }, {passive:true});
 
   function onUpdate(result) {
@@ -560,7 +568,16 @@
       return;
     }
     state.latest = reality;
-    if (poseGuard && !poseGuard.observe(reality, clock, state.placed || !!state.pendingAt)) {
+    const locked = state.placed || !!state.pendingAt;
+    const useNative = !!state.config.preferDeviceOrientation && !sdkRotationOnly;
+    const corrected = trackingNormal(reality) && cameraOrientation
+      ? cameraOrientation.correct(reality,deviceOrientation,clock,locked,useNative) : reality.rotation;
+    if (!corrected) {
+      if (poseGuard && locked) poseGuard.invalidate('device-orientation-unavailable');
+      frame[1]=0;frame[2]=0;state.normalSince=0;resetCandidate();return;
+    }
+    const displayReality = Object.assign({},reality,{rotation:corrected});
+    if (poseGuard && !poseGuard.observe(displayReality, clock, locked)) {
       frame[1] = 0; frame[2] = 0; state.normalSince = 0; resetCandidate();
       if (tableEstimator) tableEstimator.reset();
       const guard = poseGuard.snapshot();
@@ -577,13 +594,14 @@
     frame[3] = reality.position.x;
     frame[4] = reality.position.y;
     frame[5] = reality.position.z;
-    frame[6] = reality.rotation.x;
-    frame[7] = reality.rotation.y;
-    frame[8] = reality.rotation.z;
-    frame[9] = reality.rotation.w;
+    frame[6] = corrected.x;
+    frame[7] = corrected.y;
+    frame[8] = corrected.z;
+    frame[9] = corrected.w;
     for (let i = 0; i < 16; i++) frame[10 + i] = reality.intrinsics[i];
     frame[36] = canvas.width;
     frame[37] = canvas.height;
+    frame[38] = deviceOrientation && finite(deviceOrientation.screenAngle) ? deviceOrientation.screenAngle : 0;
     if (normal) {
       if (!state.normalSince) state.normalSince = clock;
       if (!state.firstNormalAt) state.firstNormalAt = clock;
@@ -753,11 +771,12 @@
         '机を映したまま姿勢を戻してください。戻らない場合はAR操作から「認識し直す」を押してください。');
       else if (state.placed && state.placementMode === 'display-check')
         message('表示だけの確認中です。', 'この配置は机の認識結果ではありません。「置き直す」で自動推定へ戻れます。');
-      else if (state.placed) message('スマホをブロアーにして球を誘導しよう。', 'スマホの位置と向きで狙い、ボタンを押している間だけ風が出ます。移動は半歩程度で。');
+      else if (state.placed) message('スマホをブロアーにして球を誘導しよう。', '中央で狙い、スマホの上端で押す向きを変えます。矢印を見ながらボタンを押してください。');
       else if (state.pendingAt) message('推定した場所へ自動配置しています。');
       else if (initializing) message(recognitionSeconds >= 20 ? '認識に時間がかかっています。' : '机全体を映して、端末をゆっくり前後へ。',
         '明るく模様のある机を使い、20〜30cmほど前後へ動かしてください。白一色・光沢の強い場所は推定しにくくなります。');
       else if (!normal) message('空間の追跡を待っています。', '机を映しながら端末をゆっくり動かしてください。');
+      else if (state.surface.reason === 'waiting-for-orientation') message('端末の向きを待っています。', 'モーションの許可を確認してください。');
       else if (state.surface.reason === 'stabilizing') message('置ける範囲を確認しています。', '机全体を画面に入れてください。条件が整うとサイズを合わせて自動配置します。');
       else message('机の水平な範囲を探しています。', '机全体を映し、半歩以内で視点を少し変えてください。配置とサイズの操作は不要です。');
     }
@@ -768,6 +787,7 @@
       '版: ' + revision,
       'AR更新: ' + (budgetArLoop ? arBudget.measuredFps.toFixed(1) + ' fps（目標 ' + arBudget.targetFps + '）' : 'SDK標準ループ'),
       '姿勢の保護: ' + (poseGuard ? poseGuard.snapshot().reason : 'missing'),
+      'カメラの向き: ' + (cameraOrientation ? cameraOrientation.snapshot().source : 'missing'),
       'Unity本体: ' + (state.config ? state.config.playerRevision || '旧版' : '未受信'),
       '認識負荷: ' + (recognitionLoadMode === 'baseline' ? '比較用・通常' : '軽減'),
       'Unity目標: ' + (report && finite(report.targetFrameRate) ? report.targetFrameRate + ' fps' : '—'),
@@ -890,6 +910,9 @@
       recognitionLoadMode: recognitionLoadMode, placementHistory: state.placementHistory.slice(),
       recognitionDiagnostics: state.recognition, recognitionHistory: state.recognitionHistory.slice(),
       motionPermission: state.motionPermission,
+      poseGuard: poseGuard ? poseGuard.snapshot() : null,
+      orientationCorrection: cameraOrientation ? cameraOrientation.snapshot() : null,
+      deviceOrientation:deviceOrientation, arBudget:Object.assign({},arBudget),
       cameraOnly: state.cameraOnly, manualBackground: state.manualBackground,
       cameraFeed: state.cameraFeed, browserRendering: browserRendering(), viewHistory: viewHistory.slice(),
       cameraPose: state.latest ? {position: copyPoint(state.latest.position),
@@ -948,10 +971,11 @@
       state.config = config;
       arBudget.targetFps = Math.max(30,Math.min(60,config.arProcessingFrameRate || 30));
       tableEstimator = window.RollTableEstimator ? RollTableEstimator(config) : null;
-      if (!config.supportsRecognitionBudget || config.playerRevision !== revision) {
+      if (!config.supportsRecognitionBudget || config.playerRevision !== revision || config.frameFloatCount !== 39) {
         fail('Unity本体の更新が必要です。', 'Roll Captureのソースから再ビルドし、Buildも公開してください。');
         return;
       }
+      if (!cameraOrientation) { fail('端末の向きの処理を読み込めませんでした。', 'camera-orientation.jsも公開してください。'); return; }
       if (!poseGuard) { fail('姿勢の保護処理を読み込めませんでした。', 'pose-guard.jsも公開してください。'); return; }
       if (!tableEstimator) { fail('机の推定処理を読み込めませんでした。', 'table-placement.jsも公開してください。'); return; }
       state.registered = true;
@@ -976,7 +1000,9 @@
         // The explicit display diagnostic uses the old player binary's placement interface.
         frame[35] = 1;
       }
-      return frame;
+      // Older players allocate 38 floats; a mismatched upload must never overrun that buffer.
+      const count = state.config && state.config.frameFloatCount === 39 ? 39 : 38;
+      return count === 39 ? frame : legacyFrame;
     },
     report: function (value) {
       state.lastReport = value;

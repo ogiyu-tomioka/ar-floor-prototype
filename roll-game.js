@@ -2,7 +2,7 @@
   'use strict';
   const panel = document.createElement('section');
   panel.id = 'roll-controls'; panel.hidden = true;
-  panel.innerHTML = '<div class="roll-hud"><span id="roll-notice">スマホで狙い、押している間だけ風を出そう</span>'
+  panel.innerHTML = '<div class="roll-hud"><span id="roll-notice">中央で狙い、スマホの上端で風向きを変えよう</span>'
     + '<button id="roll-reset">初期位置に戻す</button><button id="roll-collection">図鑑</button>'
     + '<button id="roll-tools">AR操作</button></div>'
     + '<button id="roll-blow" aria-label="押している間だけ風を出す" aria-pressed="false">押して風を出す</button>';
@@ -73,7 +73,7 @@
         : value.message === 'recovered' ? '球と未捕獲のモンスターを初期位置に戻しました'
         : value.message === 'guard' ? '防御された！ 青くないときを狙おう'
         : value.guarding ? '青いモンスターは防御中。風は球へ当てよう'
-        : 'スマホで狙い、押している間だけ風を出そう';
+        : '中央で狙い、スマホの上端で風向きを変えよう';
       if (value.collectionJson !== lastCollectionJson) {
         try { collection = JSON.parse(value.collectionJson); } catch (_) { return; }
         lastCollectionJson = value.collectionJson;
