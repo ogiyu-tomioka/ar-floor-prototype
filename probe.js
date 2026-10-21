@@ -1,7 +1,7 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.1.3';
+  const revision = '0.1.4';
   const ui = {};
   ['start', 'place', 'replace', 'recenter', 'stop', 'status', 'phase', 'guidance',
     'progress', 'loading', 'metrics', 'download', 'dimensions', 'reticle'].forEach(function (id) {
@@ -13,6 +13,10 @@
   const events = [];
   const viewHistory = [];
   let unityGl = null;
+  const alphaContexts = new WeakSet();
+  const unityAlpha = {enabled: true, installed: false, clearCalls: 0, alphaOnlyOpaqueClears: 0,
+    preventedClears: 0, preventedDefaultClears: 0, preventedOffscreenClears: 0,
+    preventedClearBufferCalls: 0, lastTarget: '', lastClearAlpha: null, error: ''};
   let xrGl = null;
   let latestCameraFrame = null;
   let manualRenderer = null;
@@ -107,6 +111,60 @@
     } catch (error) { return {error: String(error)}; }
   }
 
+  function installUnityAlphaGuard(gl) {
+    if (alphaContexts.has(gl)) return;
+    alphaContexts.add(gl);
+    try {
+      const initialMask = gl.getParameter(gl.COLOR_WRITEMASK);
+      let alphaOnlyWrites = !initialMask[0] && !initialMask[1] && !initialMask[2] && initialMask[3];
+      const originalColorMask = gl.colorMask;
+      const originalClear = gl.clear;
+      gl.colorMask = function (r, g, b, a) {
+        originalColorMask.call(gl, r, g, b, a);
+        alphaOnlyWrites = !r && !g && !b && !!a;
+      };
+      function preventOpaqueAlpha(alpha) {
+        if (!alphaOnlyWrites || !Number.isFinite(alpha) || alpha < 1) return false;
+        unityAlpha.alphaOnlyOpaqueClears++;
+        unityAlpha.lastClearAlpha = alpha;
+        if (!unityAlpha.enabled) return false;
+        const offscreen = gl.getParameter(gl.FRAMEBUFFER_BINDING) !== null;
+        unityAlpha.lastTarget = offscreen ? 'offscreen' : 'canvas';
+        unityAlpha.preventedClears++;
+        if (offscreen) unityAlpha.preventedOffscreenClears++;
+        else unityAlpha.preventedDefaultClears++;
+        return true;
+      }
+      gl.clear = function (mask) {
+        unityAlpha.clearCalls++;
+        if ((mask & gl.COLOR_BUFFER_BIT) && alphaOnlyWrites
+            && preventOpaqueAlpha(gl.getParameter(gl.COLOR_CLEAR_VALUE)[3])) {
+          // Keep depth/stencil clearing, and leave all existing color/alpha pixels intact.
+          const remaining = mask & ~gl.COLOR_BUFFER_BIT;
+          if (remaining) originalClear.call(gl, remaining);
+          return;
+        }
+        originalClear.call(gl, mask);
+      };
+      if (typeof gl.clearBufferfv === 'function') {
+        const originalClearBuffer = gl.clearBufferfv;
+        gl.clearBufferfv = function (buffer, drawbuffer, values, srcOffset) {
+          if (buffer === gl.COLOR && values && values.length >= (srcOffset || 0) + 4
+              && preventOpaqueAlpha(values[(srcOffset || 0) + 3])) {
+            unityAlpha.preventedClearBufferCalls++;
+            return;
+          }
+          return originalClearBuffer.apply(gl, arguments);
+        };
+      }
+      unityAlpha.installed = true;
+      record('unity-alpha-guard', 'Skip opaque alpha-only clears on this Unity context only.');
+    } catch (error) {
+      unityAlpha.error = String(error.message || error);
+      record('unity-alpha-guard-error', unityAlpha.error);
+    }
+  }
+
   function browserRendering() {
     const layers = Array.from(document.querySelectorAll('canvas')).map(function (element) {
       const style = getComputedStyle(element);
@@ -118,6 +176,7 @@
         transform: style.transform};
     });
     return {layers: layers, xrContext: describeContext(xrGl), unityContext: describeContext(unityGl),
+      unityAlpha: Object.assign({}, unityAlpha),
       sameContext: !!(xrGl && unityGl && xrGl === unityGl)};
   }
 
@@ -577,6 +636,8 @@
     const unityPosition = report && report.camera;
     let lines = [
       '版: ' + revision,
+      '透過補正: ' + (unityAlpha.installed ? (unityAlpha.enabled ? '有効' : '無効') : '未設定'),
+      '不透明化の抑制: ' + unityAlpha.preventedClears + '回',
       '表示: ' + (state.cameraOnly ? '現実の映像のみ' : 'キャラとの重ね合わせ'),
       '映像の再描画: ' + (state.manualBackground ? '有効' : '無効'),
       '映像テクスチャ: ' + (state.cameraFeed.texturePresent ? 'あり' : '未受信'),
@@ -603,6 +664,7 @@
     if (state.error) lines.push('エラー: ' + state.error);
     if (state.surface.queryError) lines.push('候補取得エラー: ' + state.surface.queryError);
     if (state.cameraFeed.manualError) lines.push('背景再描画エラー: ' + state.cameraFeed.manualError);
+    if (unityAlpha.error) lines.push('透過補正エラー: ' + unityAlpha.error);
     ui.metrics.textContent = lines.join('\n');
   }
 
@@ -730,7 +792,10 @@
   window.FloorProbeBridge = {
     pixelRatio: pixelRatio,
     captureContext: function (kind, context) {
-      if (context && (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl')) unityGl = context;
+      if (context && (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl')) {
+        unityGl = context;
+        installUnityAlphaGuard(context);
+      }
     },
     register: function (config) {
       state.config = config;
