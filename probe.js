@@ -1,6 +1,7 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
+  const revision = '0.1.1';
   const ui = {};
   ['start', 'place', 'replace', 'recenter', 'stop', 'status', 'phase', 'guidance',
     'progress', 'loading', 'metrics', 'download', 'dimensions', 'reticle'].forEach(function (id) {
@@ -10,13 +11,25 @@
   const frame = new Float32Array(38);
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
   const events = [];
+  const displayCheck = document.createElement('button');
+  displayCheck.textContent = '床判定を使わず表示だけ確認';
+  displayCheck.disabled = true;
+  document.getElementById('diagnostics').appendChild(displayCheck);
+  const displayNote = document.createElement('p');
+  displayNote.className = 'note';
+  displayNote.textContent = 'このボタンはカメラの前に仮キャラクターを置きます。床認識の確認にはなりません。';
+  document.getElementById('diagnostics').appendChild(displayNote);
+  document.querySelector('.eyebrow').textContent = 'AR PROTOTYPE · ' + revision;
   const state = {
     phase: 'loading', engineReady: false, unity: null, registered: false, modulesAdded: false,
     config: null, latest: null, lastPoseAt: 0, sequence: 0, normalSince: 0,
     candidate: null, stableOrigin: null, stableMean: null, stableCount: 0,
     stableSince: 0, lastHitAt: 0, lastHitCheck: 0,
     placed: false, pendingAt: 0, startedAt: 0, lastReport: null, firstNormalAt: 0,
-    lastTracking: '', hitType: '', error: '', viewportWidth: 0, viewportHeight: 0
+    lastTracking: '', hitType: '', error: '', viewportWidth: 0, viewportHeight: 0,
+    placementMode: 'floor', displayRequest: false,
+    surface: {cycles: 0, queries: 0, returned: 0, accepted: 0, types: {},
+      samples: [], rejected: {}, reason: 'not-queried', lastSignature: '', lastEventAt: 0}
   };
   const now = function () { return performance.now(); };
   const finite = function (value) { return typeof value === 'number' && Number.isFinite(value); };
@@ -71,6 +84,8 @@
   function clearPlacement() {
     state.placed = false;
     state.pendingAt = 0;
+    state.placementMode = 'floor';
+    state.displayRequest = false;
     send('ClearPlacement');
     resetCandidate();
   }
@@ -97,29 +112,110 @@
     return reality.trackingStatus === 'NORMAL' && reality.trackingReason !== 'INITIALIZING';
   }
 
+  function queryHits(x, y, mode) {
+    state.surface.queries++;
+    try {
+      // Query the SDK default and its documented FEATURE_POINT mode separately.
+      const results = mode === 'feature'
+        ? XR8.XrController.hitTest(x, y, ['FEATURE_POINT'])
+        : XR8.XrController.hitTest(x, y);
+      return Array.isArray(results) ? results : [];
+    } catch (error) {
+      state.surface.queryError = String(error.message || error);
+      return [];
+    }
+  }
+
+  function isSurface(hit) {
+    return hit && (hit.type === 'DETECTED_SURFACE' || hit.type === 'ESTIMATED_SURFACE');
+  }
+
+  function noteRejection(reason) {
+    state.surface.rejected[reason] = (state.surface.rejected[reason] || 0) + 1;
+    state.surface.reason = reason;
+  }
+
+  function nearbySurface(x, y, center, mode) {
+    const hits = queryHits(x, y, mode).filter(function (hit) {
+      return isSurface(hit) && pointValid(hit.position) && distance(hit.position, center) < 0.6;
+    });
+    hits.sort(function (a, b) { return distance(a.position, center) - distance(b.position, center); });
+    return hits[0] && hits[0].position;
+  }
+
+  function surfaceUp(center, mode) {
+    const right = nearbySurface(0.55, 0.58, center, mode);
+    const down = nearbySurface(0.5, 0.63, center, mode);
+    state.surface.neighbors = {right: right ? copyPoint(right) : null, down: down ? copyPoint(down) : null};
+    if (!right || !down) return null;
+    const ax = right.x - center.x, ay = right.y - center.y, az = right.z - center.z;
+    const bx = down.x - center.x, by = down.y - center.y, bz = down.z - center.z;
+    const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    const length = Math.hypot(nx, ny, nz);
+    if (length < 0.00001) return null;
+    // Winding changes the sign; only the geometric plane's slope is relevant here.
+    return Math.abs(ny) / length;
+  }
+
+  function recordSurface(clock) {
+    const summary = state.surface;
+    const signature = JSON.stringify([summary.reason, summary.samples.map(function (sample) { return sample.type; })]);
+    if (signature !== summary.lastSignature && clock - summary.lastEventAt >= 2000) {
+      record('surface-query', {reason: summary.reason, samples: summary.samples, rejected: summary.rejected});
+      summary.lastSignature = signature;
+      summary.lastEventAt = clock;
+    }
+  }
+
   function updateCandidate(reality, clock) {
-    if (clock - state.lastHitCheck < 100) return;
+    if (clock - state.lastHitCheck < 200) return;
     state.lastHitCheck = clock;
-    // Use SDK surface hits only. Feature points and arbitrary ray/plane intersections are rejected.
-    const results = XR8.XrController.hitTest(0.5, 0.58, []) || [];
-    const minimumUp = Math.cos(state.config.maximumSlope * Math.PI / 180);
-    const options = results.filter(function (hit) {
-      if (hit.type !== 'DETECTED_SURFACE' && hit.type !== 'ESTIMATED_SURFACE') return false;
-      if (!pointValid(hit.position) || !quatValid(hit.rotation)) return false;
-      const q = hit.rotation;
-      const norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
-      if (norm < 0.001) return false;
-      const up = 1 - 2 * (q.x * q.x + q.z * q.z) / norm;
-      const range = distance(hit.position, reality.position);
-      return up >= minimumUp && range >= state.config.minimumDistance
-        && range <= state.config.maximumDistance && hit.position.y < reality.position.y - 0.15;
+    const stats = state.surface;
+    stats.cycles++;
+    stats.rejected = {};
+    stats.queryError = '';
+    stats.reason = 'no-hits';
+    const options = [];
+    stats.samples = [];
+    ['default', 'feature'].forEach(function (mode) {
+      const results = queryHits(0.5, 0.58, mode);
+      stats.returned += results.length;
+      results.forEach(function (hit) {
+        const type = hit && String(hit.type);
+        stats.types[type] = (stats.types[type] || 0) + 1;
+        if (stats.samples.length < 6) stats.samples.push({query: mode, type: type,
+          position: hit && pointValid(hit.position) ? copyPoint(hit.position) : null,
+          rotation: hit && quatValid(hit.rotation) ? {x: hit.rotation.x, y: hit.rotation.y, z: hit.rotation.z, w: hit.rotation.w} : null,
+          distance: hit && finite(hit.distance) ? hit.distance : null});
+        if (!isSurface(hit)) { noteRejection('not-a-surface'); return; }
+        if (!pointValid(hit.position)) { noteRejection('invalid-position'); return; }
+        const range = distance(hit.position, reality.position);
+        if (range < state.config.minimumDistance || range > state.config.maximumDistance) {
+          noteRejection('outside-distance-range'); return;
+        }
+        if (hit.position.y >= reality.position.y - 0.15) { noteRejection('not-below-camera'); return; }
+        options.push({hit: hit, mode: mode, range: range});
+      });
     });
     options.sort(function (a, b) {
-      if (a.type !== b.type) return a.type === 'DETECTED_SURFACE' ? -1 : 1;
-      return distance(a.position, reality.position) - distance(b.position, reality.position);
+      if (a.hit.type !== b.hit.type) return a.hit.type === 'DETECTED_SURFACE' ? -1 : 1;
+      return a.range - b.range;
     });
-    const hit = options[0];
-    if (!hit) { resetCandidate(); state.hitType = ''; return; }
+    let hit = null;
+    for (let index = 0; index < Math.min(options.length, 2); index++) {
+      const option = options[index];
+      // Hit rotation does not document which local axis is the surface normal.
+      // Derive a normal from adjacent SDK surface positions instead of assuming local +Y.
+      const up = surfaceUp(option.hit.position, option.mode);
+      if (up === null) { noteRejection('surface-normal-unavailable'); continue; }
+      stats.lastSlopeDegrees = Math.acos(Math.min(1, up)) * 180 / Math.PI;
+      if (up < Math.cos(state.config.maximumSlope * Math.PI / 180)) { noteRejection('surface-too-steep'); continue; }
+      hit = option.hit;
+      break;
+    }
+    if (!hit) { resetCandidate(); state.hitType = ''; recordSurface(clock); return; }
+    stats.accepted++;
+    stats.reason = 'surface-selected';
     state.hitType = hit.type;
     state.lastHitAt = clock;
     if (!state.stableOrigin || distance(state.stableOrigin, hit.position) > state.config.stableRadius) {
@@ -135,20 +231,18 @@
       });
     }
     state.candidate = {
-      position: copyPoint(state.stableMean), rotation: hit.rotation, type: hit.type,
+      position: copyPoint(state.stableMean), type: hit.type,
       distance: distance(state.stableMean, reality.position)
     };
     frame[26] = 1;
     frame[27] = state.candidate.position.x;
     frame[28] = state.candidate.position.y;
     frame[29] = state.candidate.position.z;
-    frame[30] = hit.rotation.x;
-    frame[31] = hit.rotation.y;
-    frame[32] = hit.rotation.z;
-    frame[33] = hit.rotation.w;
+    frame[30] = 0; frame[31] = 0; frame[32] = 0; frame[33] = 1;
     frame[34] = state.candidate.distance;
     frame[35] = clock - state.stableSince >= state.config.stableSeconds * 1000
       && clock - state.normalSince >= 1000 ? 1 : 0;
+    recordSurface(clock);
   }
 
   function onUpdate(result) {
@@ -315,25 +409,38 @@
     ui.replace.disabled = !running || !state.placed;
     ui.recenter.disabled = !running;
     ui.stop.disabled = !running && state.phase !== 'paused';
+    displayCheck.disabled = !normal || state.placed || !!state.pendingAt;
     const labels = {loading: '準備中', ready: '準備完了', starting: '開始中',
-      running: state.placed ? '配置済み' : ready ? '配置できます' : '認識中',
+      running: state.placed ? (state.placementMode === 'display-check' ? '表示確認中' : '配置済み')
+        : ready ? '配置できます' : '認識中',
       stopped: '終了', paused: '一時停止', error: '確認が必要'};
     ui.phase.textContent = labels[state.phase] || state.phase;
     if (running) {
       if (!normal) message('床の認識を安定させています。', '床を映したまま、端末をゆっくり前後に動かしてください。認識中は表示を隠します。');
-      else if (state.placed) message('床に固定しました。', '端末を左右・上下に動かし、位置と大きさを確認してください。');
+      else if (state.placed && state.placementMode === 'display-check')
+        message('床判定を使わない表示確認中です。', '仮キャラクターが見えるか確認してください。この結果は床認識の成功を意味しません。');
+      else if (state.placed) message('床に配置しました。', '端末を左右・上下に動かし、足元の位置と大きさを確認してください。');
       else if (state.pendingAt) message('Unityへ配置を伝えています。');
       else if (ready) message('この場所に配置できます。', '「ここに置く」を押してください。枠の一辺は1m、キャラクターは50cmが初期値です。');
       else if (state.candidate) message('同じ場所を少し映し続けてください。', '配置位置が安定するとボタンが有効になります。');
+      else if (state.surface.cycles > 5 && state.surface.reason === 'not-a-surface')
+        message('空間の追跡はできていますが、水平面を取得できていません。', '「確認用の詳細」の表示確認ボタンを押し、診断を保存してください。');
+      else if (state.surface.cycles > 5 && state.surface.reason === 'no-hits')
+        message('空間の追跡はできていますが、配置候補は0件です。', '「確認用の詳細」の表示確認ボタンを押し、診断を保存してください。');
       else message('床に照準を合わせてください。', '明るく、模様のある床を映してください。近すぎる場所や壁には配置しません。');
     }
     const report = state.lastReport;
     const position = state.latest && state.latest.position;
     const unityPosition = report && report.camera;
     let lines = [
+      '版: ' + revision,
       '状態: ' + state.phase,
+      '確認モード: ' + state.placementMode,
       '追跡: ' + state.lastTracking,
       '面の種類: ' + (state.hitType || 'なし'),
+      'SDKの候補: ' + JSON.stringify(state.surface.types),
+      '判定: ' + state.surface.reason,
+      '今回の除外理由: ' + JSON.stringify(state.surface.rejected),
       '距離: ' + (state.candidate ? state.candidate.distance.toFixed(2) + 'm' : '—'),
       'Unity表示: ' + (report ? report.fps.toFixed(1) + ' fps' : '受信待ち'),
       'フレーム: ' + state.sequence,
@@ -344,6 +451,7 @@
     if (position) lines.push('XR座標: ' + [position.x, position.y, position.z].map(function (v) { return v.toFixed(3); }).join(', '));
     if (unityPosition) lines.push('Unity座標: ' + [unityPosition.x, unityPosition.y, unityPosition.z].map(function (v) { return v.toFixed(3); }).join(', '));
     if (state.error) lines.push('エラー: ' + state.error);
+    if (state.surface.queryError) lines.push('候補取得エラー: ' + state.surface.queryError);
     ui.metrics.textContent = lines.join('\n');
   }
 
@@ -368,9 +476,30 @@
   ui.place.addEventListener('click', function () {
     if (ui.place.disabled || !state.candidate || now() - state.lastHitAt > 300) return;
     const point = copyPoint(state.candidate.position);
+    state.placementMode = 'floor';
     state.pendingAt = now();
     send('PlaceFromBrowser', JSON.stringify({position: point}));
     record('place-request', {position: point, surface: state.candidate.type});
+    updateUi();
+  });
+  displayCheck.addEventListener('click', function () {
+    if (displayCheck.disabled || !state.latest || !quatValid(state.latest.rotation)) return;
+    const q = state.latest.rotation;
+    const length = Math.hypot(q.x, q.y, q.z, q.w);
+    if (length < 0.001) return;
+    const x = q.x / length, y = q.y / length, z = q.z / length, w = q.w / length;
+    // Diagnostic target along the SDK camera's local -Z. This is not a surface estimate.
+    const forward = {x: -2 * (x * z + y * w), y: 2 * (x * w - y * z), z: 2 * (x * x + y * y) - 1};
+    const camera = state.latest.position;
+    const point = {x: camera.x + forward.x * 1.5,
+      y: camera.y + forward.y * 1.5 - state.config.characterHeight / 2,
+      z: camera.z + forward.z * 1.5};
+    state.placementMode = 'display-check';
+    state.displayRequest = true;
+    state.pendingAt = now();
+    frame[35] = 1;
+    send('PlaceFromBrowser', JSON.stringify({position: point}));
+    record('display-check-request', {position: point, floorDetection: false});
     updateUi();
   });
   ui.replace.addEventListener('click', function () { clearPlacement(); record('replace', 'Reselect surface.'); updateUi(); });
@@ -385,11 +514,17 @@
   ui.stop.addEventListener('click', stop);
   ui.download.addEventListener('click', function () {
     const payload = {
-      prototype: 'ARFloorPrototype-0.1.0', savedAt: new Date().toISOString(),
+      prototype: 'ARFloorPrototype-' + revision, savedAt: new Date().toISOString(),
       page: location.origin + location.pathname, userAgent: navigator.userAgent,
       viewport: {width: innerWidth, height: innerHeight, pixelRatio: pixelRatio},
       phase: state.phase, config: state.config, tracking: state.lastTracking,
       hitType: state.hitType, unity: state.lastReport, error: state.error,
+      placementMode: state.placementMode, surfaceDiagnostics: state.surface,
+      cameraPose: state.latest ? {position: copyPoint(state.latest.position),
+        rotation: {x: state.latest.rotation.x, y: state.latest.rotation.y, z: state.latest.rotation.z, w: state.latest.rotation.w},
+        projection: Array.from(state.latest.intrinsics)} : null,
+      canvasSizes: {xr: {width: canvas.width, height: canvas.height},
+        unity: {width: document.getElementById('unity-canvas').width, height: document.getElementById('unity-canvas').height}},
       events: events.slice()
     };
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'}));
@@ -436,6 +571,9 @@
         frame[1] = 0; frame[2] = 0; frame[26] = 0; frame[35] = 0;
         state.normalSince = 0;
         resetCandidate();
+      } else if (state.displayRequest && state.pendingAt && frame[2] > 0.5) {
+        // The explicit display diagnostic uses the old player binary's placement interface.
+        frame[35] = 1;
       }
       return frame;
     },
@@ -444,9 +582,14 @@
       // Only Unity acknowledges placement; a browser request is not proof of success.
       if (state.pendingAt && value.placed) {
         state.placed = true; state.pendingAt = 0;
-        record('place-acknowledged', value.anchor);
+        state.displayRequest = false;
+        frame[35] = 0;
+        record('place-acknowledged', {position: value.anchor, mode: state.placementMode});
       } else if (state.pendingAt && now() - state.pendingAt > 1500) {
         state.pendingAt = 0;
+        state.displayRequest = false;
+        state.placementMode = 'floor';
+        frame[35] = 0;
         record('place-rejected', 'Unity did not acknowledge placement.');
       }
       updateUi();
