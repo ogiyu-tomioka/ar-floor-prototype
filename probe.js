@@ -1,7 +1,7 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.1.1';
+  const revision = '0.1.3';
   const ui = {};
   ['start', 'place', 'replace', 'recenter', 'stop', 'status', 'phase', 'guidance',
     'progress', 'loading', 'metrics', 'download', 'dimensions', 'reticle'].forEach(function (id) {
@@ -11,6 +11,25 @@
   const frame = new Float32Array(38);
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
   const events = [];
+  const viewHistory = [];
+  let unityGl = null;
+  let xrGl = null;
+  let latestCameraFrame = null;
+  let manualRenderer = null;
+  const cameraOnly = document.createElement('button');
+  cameraOnly.textContent = 'カメラ映像だけ表示';
+  cameraOnly.disabled = true;
+  const redraw = document.createElement('button');
+  redraw.textContent = '映像の再描画を試す';
+  redraw.disabled = true;
+  const feedControls = document.createElement('div');
+  feedControls.className = 'feed-controls';
+  feedControls.append(cameraOnly, redraw);
+  document.getElementById('diagnostics').before(feedControls);
+  const feedNote = document.createElement('p');
+  feedNote.className = 'note';
+  feedNote.textContent = 'キャラの画面だけを隠して、下にある現実の映像を確認できます。配置は消しません。';
+  feedControls.after(feedNote);
   const displayCheck = document.createElement('button');
   displayCheck.textContent = '床判定を使わず表示だけ確認';
   displayCheck.disabled = true;
@@ -27,7 +46,12 @@
     stableSince: 0, lastHitAt: 0, lastHitCheck: 0,
     placed: false, pendingAt: 0, startedAt: 0, lastReport: null, firstNormalAt: 0,
     lastTracking: '', hitType: '', error: '', viewportWidth: 0, viewportHeight: 0,
-    placementMode: 'floor', displayRequest: false,
+    placementMode: 'floor', displayRequest: false, cameraOnly: false, manualBackground: false,
+    cameraFeed: {gpuFrames: 0, renderCallbacks: 0, freshVideoFrames: 0,
+      texturePresent: false, textureContextMatches: null,
+      textureWidth: 0, textureHeight: 0, videoWidth: 0, videoHeight: 0,
+      videoTime: null, repeatFrame: null, viewport: null, canvasMatches: null,
+      manualDraws: 0, manualError: ''},
     surface: {cycles: 0, queries: 0, returned: 0, accepted: 0, types: {},
       samples: [], rejected: {}, reason: 'not-queried', lastSignature: '', lastEventAt: 0}
   };
@@ -68,6 +92,100 @@
     if (!state.unity || !state.registered) return;
     if (argument === undefined) state.unity.SendMessage('FloorProbe', method);
     else state.unity.SendMessage('FloorProbe', method, argument);
+  }
+
+  function useArCamera() {
+    // The original 0.1.0 player has no diagnostic modes. 0.1.2 does.
+    if (state.config && state.config.playerRevision === '0.1.2') send('SetRenderMode', 'ar');
+  }
+
+  function describeContext(gl) {
+    if (!gl) return null;
+    try {
+      return {attributes: gl.getContextAttributes(), lost: gl.isContextLost(),
+        drawingBufferWidth: gl.drawingBufferWidth, drawingBufferHeight: gl.drawingBufferHeight};
+    } catch (error) { return {error: String(error)}; }
+  }
+
+  function browserRendering() {
+    const layers = Array.from(document.querySelectorAll('canvas')).map(function (element) {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return {id: element.id, width: element.width, height: element.height,
+        rect: {x: box.x, y: box.y, width: box.width, height: box.height},
+        position: style.position, zIndex: style.zIndex, display: style.display,
+        visibility: style.visibility, opacity: style.opacity, background: style.backgroundColor,
+        transform: style.transform};
+    });
+    return {layers: layers, xrContext: describeContext(xrGl), unityContext: describeContext(unityGl),
+      sameContext: !!(xrGl && unityGl && xrGl === unityGl)};
+  }
+
+  function saveView(reason) {
+    viewHistory.push({time: new Date().toISOString(), reason: reason,
+      cameraOnly: state.cameraOnly, manualBackground: state.manualBackground,
+      cameraFeed: Object.assign({}, state.cameraFeed), browserRendering: browserRendering(),
+      unity: state.lastReport});
+    if (viewHistory.length > 12) viewHistory.shift();
+  }
+
+  function scheduleView(reason) {
+    const requestedView = state.cameraOnly, requestedRedraw = state.manualBackground;
+    setTimeout(function () {
+      if (state.phase === 'running' && requestedView === state.cameraOnly
+          && requestedRedraw === state.manualBackground) saveView(reason);
+    }, 2000);
+  }
+
+  function destroyManualRenderer() {
+    if (manualRenderer) {
+      try { manualRenderer.destroy(); } catch (error) { record('renderer-cleanup', String(error)); }
+    }
+    manualRenderer = null;
+    latestCameraFrame = null;
+  }
+
+  function inspectCameraFrame(result) {
+    const cameraFrame = result.frameStartResult;
+    if (!cameraFrame) return;
+    latestCameraFrame = cameraFrame;
+    const stats = state.cameraFeed;
+    stats.gpuFrames++;
+    stats.texturePresent = !!cameraFrame.cameraTexture;
+    stats.textureContextMatches = cameraFrame.GLctx === xrGl;
+    stats.textureWidth = cameraFrame.textureWidth;
+    stats.textureHeight = cameraFrame.textureHeight;
+    stats.repeatFrame = !!cameraFrame.repeatFrame;
+    if (cameraFrame.videoTime !== stats.videoTime) stats.freshVideoFrames++;
+    stats.videoTime = cameraFrame.videoTime;
+  }
+
+  function drawCameraFrame() {
+    state.cameraFeed.renderCallbacks++;
+    if (!state.manualBackground || !xrGl || !latestCameraFrame
+        || !latestCameraFrame.cameraTexture || state.cameraFeed.manualError || xrGl.isContextLost()) return;
+    let restore;
+    try {
+      restore = XR8.GlTextureRenderer.getGLctxParameters(xrGl, [xrGl.TEXTURE0]);
+      if (latestCameraFrame.GLctx !== xrGl) throw new Error('Camera texture uses a different WebGL context.');
+      if (!manualRenderer) manualRenderer = XR8.GlTextureRenderer.create({GLctx: xrGl});
+      const sdkViewport = state.cameraFeed.viewport;
+      const viewport = sdkViewport && finite(sdkViewport.width) && sdkViewport.width > 0
+        && finite(sdkViewport.height) && sdkViewport.height > 0 ? sdkViewport : XR8.GlTextureRenderer.fillTextureViewport(
+        latestCameraFrame.textureWidth, latestCameraFrame.textureHeight,
+        xrGl.drawingBufferWidth, xrGl.drawingBufferHeight);
+      state.cameraFeed.manualViewport = viewport;
+      manualRenderer.render({renderTexture: latestCameraFrame.cameraTexture, viewport: viewport});
+      state.cameraFeed.manualDraws++;
+    } catch (error) {
+      state.cameraFeed.manualError = String(error.message || error);
+      record('camera-redraw-error', state.cameraFeed.manualError);
+    } finally {
+      if (restore) {
+        try { XR8.GlTextureRenderer.setGLctxParameters(xrGl, restore); }
+        catch (error) { state.cameraFeed.manualError = String(error.message || error); }
+      }
+    }
   }
 
   function resetCandidate() {
@@ -247,6 +365,11 @@
 
   function onUpdate(result) {
     if (state.phase !== 'running') return;
+    const background = result.processGpuResult && result.processGpuResult.gltexturerenderer;
+    if (background && background.viewport) {
+      const v = background.viewport;
+      state.cameraFeed.viewport = {width: v.width, height: v.height, offsetX: v.offsetX, offsetY: v.offsetY};
+    }
     const reality = result.processCpuResult && result.processCpuResult.reality;
     let projectionValid = !!(reality && reality.intrinsics && reality.intrinsics.length === 16);
     if (projectionValid) {
@@ -301,17 +424,29 @@
       {
         name: 'unity-floor-probe',
         onStart: function (result) {
+          destroyManualRenderer();
+          xrGl = result.GLctx;
+          state.cameraFeed.canvasMatches = result.canvas === canvas && !!xrGl && xrGl.canvas === canvas;
+          state.cameraFeed.videoWidth = result.videoWidth;
+          state.cameraFeed.videoHeight = result.videoHeight;
+          state.cameraFeed.viewport = null;
+          state.cameraFeed.manualError = '';
           state.viewportWidth = result.canvasWidth;
           state.viewportHeight = result.canvasHeight;
           setProjection(result.canvasWidth, result.canvasHeight);
           state.phase = 'running';
           state.startedAt = now();
           state.firstNormalAt = 0;
-          record('camera-start', {width: result.canvasWidth, height: result.canvasHeight});
+          record('camera-start', {width: result.canvasWidth, height: result.canvasHeight,
+            cameraFeed: Object.assign({}, state.cameraFeed), browserRendering: browserRendering()});
+          scheduleView('camera-started');
           message('床を認識しています。', '床を映したまま、端末をゆっくり前後・左右に動かしてください。');
           updateUi();
         },
         onUpdate: onUpdate,
+        onProcessGpu: inspectCameraFrame,
+        onRender: drawCameraFrame,
+        onDetach: destroyManualRenderer,
         onCanvasSizeChange: function (result) {
           if (state.phase !== 'running') return;
           if (state.viewportWidth === result.canvasWidth && state.viewportHeight === result.canvasHeight) return;
@@ -359,6 +494,7 @@
     try {
       await requestMotion();
       clearPlacement();
+      useArCamera();
       resizeCanvas();
       addModules();
       if (resume) {
@@ -398,6 +534,11 @@
     document.body.classList.toggle('active', running);
     document.body.classList.toggle('placed', state.placed);
     document.body.classList.toggle('ready', ready);
+    document.body.classList.toggle('camera-only', state.cameraOnly);
+    cameraOnly.disabled = !running;
+    cameraOnly.textContent = state.cameraOnly ? 'キャラと重ねる表示に戻す' : 'カメラ映像だけ表示';
+    redraw.disabled = !running;
+    redraw.textContent = state.manualBackground ? '再描画をやめる' : '映像の再描画を試す';
     ui.place.hidden = !running || state.placed;
     ui.place.disabled = !ready;
     ui.start.hidden = running || state.phase === 'starting';
@@ -416,7 +557,9 @@
       stopped: '終了', paused: '一時停止', error: '確認が必要'};
     ui.phase.textContent = labels[state.phase] || state.phase;
     if (running) {
-      if (!normal) message('床の認識を安定させています。', '床を映したまま、端末をゆっくり前後に動かしてください。認識中は表示を隠します。');
+      if (state.cameraOnly)
+        message('現実のカメラ映像だけを確認しています。', '現実の映像が見えるか確認してください。見えなければ「映像の再描画を試す」を押してください。');
+      else if (!normal) message('空間の追跡を安定させています。', '床を映したまま、端末をゆっくり前後に動かしてください。認識中は表示を隠します。');
       else if (state.placed && state.placementMode === 'display-check')
         message('床判定を使わない表示確認中です。', '仮キャラクターが見えるか確認してください。この結果は床認識の成功を意味しません。');
       else if (state.placed) message('床に配置しました。', '端末を左右・上下に動かし、足元の位置と大きさを確認してください。');
@@ -434,6 +577,13 @@
     const unityPosition = report && report.camera;
     let lines = [
       '版: ' + revision,
+      '表示: ' + (state.cameraOnly ? '現実の映像のみ' : 'キャラとの重ね合わせ'),
+      '映像の再描画: ' + (state.manualBackground ? '有効' : '無効'),
+      '映像テクスチャ: ' + (state.cameraFeed.texturePresent ? 'あり' : '未受信'),
+      '映像サイズ: ' + state.cameraFeed.textureWidth + ' × ' + state.cameraFeed.textureHeight,
+      '映像更新: ' + state.cameraFeed.freshVideoFrames,
+      '背景描画の機会: ' + state.cameraFeed.renderCallbacks,
+      '再描画回数: ' + state.cameraFeed.manualDraws,
       '状態: ' + state.phase,
       '確認モード: ' + state.placementMode,
       '追跡: ' + state.lastTracking,
@@ -442,7 +592,7 @@
       '判定: ' + state.surface.reason,
       '今回の除外理由: ' + JSON.stringify(state.surface.rejected),
       '距離: ' + (state.candidate ? state.candidate.distance.toFixed(2) + 'm' : '—'),
-      'Unity表示: ' + (report ? report.fps.toFixed(1) + ' fps' : '受信待ち'),
+      'Unity更新: ' + (report ? report.fps.toFixed(1) + ' fps' : '受信待ち'),
       'フレーム: ' + state.sequence,
       'AR解像度: ' + canvas.width + ' × ' + canvas.height,
       '初回追跡まで: ' + (state.firstNormalAt && state.startedAt
@@ -452,6 +602,7 @@
     if (unityPosition) lines.push('Unity座標: ' + [unityPosition.x, unityPosition.y, unityPosition.z].map(function (v) { return v.toFixed(3); }).join(', '));
     if (state.error) lines.push('エラー: ' + state.error);
     if (state.surface.queryError) lines.push('候補取得エラー: ' + state.surface.queryError);
+    if (state.cameraFeed.manualError) lines.push('背景再描画エラー: ' + state.cameraFeed.manualError);
     ui.metrics.textContent = lines.join('\n');
   }
 
@@ -459,6 +610,7 @@
     if (state.phase !== 'loading') return;
     if (!state.engineReady || !state.unity || !state.registered) return;
     state.phase = 'ready';
+    useArCamera();
     ui.loading.hidden = true;
     message('準備ができました。', '「ARを開始」を押し、カメラとモーションを許可してください。');
     updateUi();
@@ -473,6 +625,23 @@
   if (window.XR8) onEngineLoaded();
 
   ui.start.addEventListener('click', start);
+  cameraOnly.addEventListener('click', function () {
+    if (cameraOnly.disabled) return;
+    saveView('before-view-change');
+    state.cameraOnly = !state.cameraOnly;
+    record('camera-only', state.cameraOnly);
+    updateUi();
+    scheduleView('after-view-change');
+  });
+  redraw.addEventListener('click', function () {
+    if (redraw.disabled) return;
+    saveView('before-redraw-change');
+    state.manualBackground = !state.manualBackground;
+    state.cameraFeed.manualError = '';
+    record('manual-background', state.manualBackground);
+    updateUi();
+    scheduleView('after-redraw-change');
+  });
   ui.place.addEventListener('click', function () {
     if (ui.place.disabled || !state.candidate || now() - state.lastHitAt > 300) return;
     const point = copyPoint(state.candidate.position);
@@ -520,6 +689,8 @@
       phase: state.phase, config: state.config, tracking: state.lastTracking,
       hitType: state.hitType, unity: state.lastReport, error: state.error,
       placementMode: state.placementMode, surfaceDiagnostics: state.surface,
+      cameraOnly: state.cameraOnly, manualBackground: state.manualBackground,
+      cameraFeed: state.cameraFeed, browserRendering: browserRendering(), viewHistory: viewHistory.slice(),
       cameraPose: state.latest ? {position: copyPoint(state.latest.position),
         rotation: {x: state.latest.rotation.x, y: state.latest.rotation.y, z: state.latest.rotation.z, w: state.latest.rotation.w},
         projection: Array.from(state.latest.intrinsics)} : null,
@@ -558,6 +729,9 @@
 
   window.FloorProbeBridge = {
     pixelRatio: pixelRatio,
+    captureContext: function (kind, context) {
+      if (context && (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl')) unityGl = context;
+    },
     register: function (config) {
       state.config = config;
       state.registered = true;

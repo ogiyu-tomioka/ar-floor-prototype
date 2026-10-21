@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
   <title>ARの床置きテスト</title>
-  <link rel="stylesheet" href="probe.css">
+  <link rel="stylesheet" href="probe.css?v=0.1.3">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
@@ -39,7 +39,7 @@
   <!-- This product includes the XR Engine software developed by Niantic Spatial, Inc.
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
-  <script src="probe.js?v=0.1.1"></script>
+  <script src="probe.js?v=0.1.3"></script>
   <script>
     (function () {
       const unityCanvas = document.getElementById('unity-canvas');
@@ -49,7 +49,9 @@
         if (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl') {
           attributes = Object.assign({}, attributes, {alpha: true, premultipliedAlpha: true});
         }
-        return nativeGetContext(kind, attributes);
+        const context = nativeGetContext(kind, attributes);
+        FloorProbeBridge.captureContext(kind, context);
+        return context;
       };
       const config = {
         dataUrl: 'Build/Web.data',
@@ -61,7 +63,8 @@
         productVersion: "0.1.0",
         devicePixelRatio: FloorProbeBridge.pixelRatio,
         webglContextAttributes: {alpha: true, premultipliedAlpha: true},
-        showBanner: function (message, type) { FloorProbeBridge.banner(message, type); }
+        showBanner: function (message, type) { FloorProbeBridge.banner(message, type); },
+        printErr: function (message) { FloorProbeBridge.banner(message, 'stderr'); }
       };
       const loader = document.createElement('script');
       loader.src = 'Build/Web.loader.js';
@@ -82,3 +85,4 @@
   </script>
 </body>
 </html>
+

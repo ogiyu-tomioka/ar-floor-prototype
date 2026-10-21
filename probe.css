@@ -23,6 +23,10 @@ button.primary { width: 100%; background: #b5f2d3; border: 0; color: #102923; fo
 [hidden] { display: none !important; }
 .actions { display: flex; gap: 8px; margin-top: 9px; }
 .actions button { flex: 1; }
+.feed-controls { display: flex; gap: 8px; margin-top: 9px; }
+.feed-controls button { flex: 1; }
+body.camera-only #unity-canvas { visibility: hidden !important; }
+body.camera-only #reticle { display: none; }
 details { margin-top: 13px; font-size: 11px; color: #acc4bc; }
 summary { cursor: pointer; padding: 7px 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; margin: 8px 0; }
