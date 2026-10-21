@@ -4,26 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
-  <title>ARの床置きテスト</title>
-  <link rel="stylesheet" href="probe.css?v=0.1.7">
+  <title>Roll-by-Blow</title>
+  <link rel="stylesheet" href="probe.css?v=0.3.0">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
-  <canvas id="unity-canvas" tabindex="-1" aria-label="ARの仮キャラクターと比較枠"></canvas>
+  <canvas id="unity-canvas" tabindex="-1" aria-label="机上のゲームステージ"></canvas>
   <header class="panel top">
     <div class="eyebrow">AR PROTOTYPE · 01</div>
-    <div class="heading"><h1>床に置いてみる</h1><span id="phase" class="badge">準備中</span></div>
+    <div class="heading"><h1>Roll-by-Blow</h1><span id="phase" class="badge">準備中</span></div>
     <p id="status" role="status" aria-live="polite">表示データを読み込んでいます。</p>
     <div id="coaching" hidden>
       <div class="motion-demo" aria-hidden="true"><span class="motion-phone"></span><span>前へ ⇄ 手元へ</span></div>
-      <p>立ったままでOK。床を映し、端末をゆっくり前後へ。</p>
+      <p>机全体を映し、端末をゆっくり前後へ。</p>
     </div>
     <div class="loading" id="loading"><div id="progress"></div></div>
   </header>
   <div id="reticle" aria-hidden="true"><span></span></div>
   <main class="panel bottom">
-    <div class="dimensions" id="dimensions">キャラクター 50cm · 比較枠 1m四方</div>
-    <p id="guidance">立ったまま、胸元の高さから明るく模様のある床へ斜めに向けて始めてください。</p>
+    <div class="dimensions" id="dimensions">机の範囲からステージを自動配置します</div>
+    <p id="guidance">明るく模様のある机全体を映して始めてください。</p>
     <button id="start" class="primary" disabled>読み込み中…</button>
     <button id="place" class="primary" disabled hidden>推定地面に置く</button>
     <div class="actions">
@@ -43,7 +43,9 @@
   <!-- This product includes the XR Engine software developed by Niantic Spatial, Inc.
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
-  <script src="probe.js?v=0.1.7"></script>
+  <script src="table-placement.js?v=0.3.0"></script>
+  <script src="probe.js?v=0.3.0"></script>
+  <script src="roll-game.js?v=0.3.0"></script>
   <script>
     (function () {
       const unityCanvas = document.getElementById('unity-canvas');
@@ -63,8 +65,8 @@
         codeUrl: 'Build/Web.wasm',
         streamingAssetsUrl: 'StreamingAssets',
         companyName: "LocalPrototype",
-        productName: "AR Floor Prototype",
-        productVersion: "0.1.7",
+        productName: "AR Roll Capture",
+        productVersion: "0.3.0",
         devicePixelRatio: FloorProbeBridge.pixelRatio,
         webglContextAttributes: {alpha: true, premultipliedAlpha: true},
         showBanner: function (message, type) { FloorProbeBridge.banner(message, type); },

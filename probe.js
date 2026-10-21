@@ -1,11 +1,12 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.1.7';
+  const revision = '0.3.0';
+  let tableEstimator = null;
   const recognitionLoadMode = new URLSearchParams(location.search).get('load') === 'baseline' ? 'baseline' : 'reduced';
   // SDK absolute mode estimates y=0 as ground; this is not a detected plane mesh.
   const groundSettings = {planeHeight: 0, screenX: 0.5, screenY: 0.5,
-    minimumCameraHeight: 0.15, normalSeconds: 1};
+    minimumCameraHeight: 0.15, normalSeconds: 1, allowPlacementWhileMoving: true};
   const ui = {};
   ['start', 'place', 'replace', 'recenter', 'stop', 'status', 'phase', 'guidance',
     'progress', 'loading', 'metrics', 'download', 'dimensions', 'reticle', 'coaching'].forEach(function (id) {
@@ -13,7 +14,7 @@
   });
   const canvas = document.getElementById('camera-canvas');
   const frame = new Float32Array(38);
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 1);
   const events = [];
   const viewHistory = [];
   let unityGl = null;
@@ -39,15 +40,15 @@
   feedNote.textContent = 'キャラの画面だけを隠して、下にある現実の映像を確認できます。配置は消しません。';
   feedControls.after(feedNote);
   const displayCheck = document.createElement('button');
-  displayCheck.textContent = '床判定を使わず表示だけ確認';
+  displayCheck.textContent = '平面推定を使わず表示だけ確認';
   displayCheck.disabled = true;
   document.getElementById('diagnostics').appendChild(displayCheck);
   const displayNote = document.createElement('p');
   displayNote.className = 'note';
-  displayNote.textContent = 'このボタンはカメラの前に仮キャラクターを置きます。床認識の確認にはなりません。';
+  displayNote.textContent = 'このボタンはカメラの前にステージを仮置きします。机の認識・自動配置の確認にはなりません。';
   document.getElementById('diagnostics').appendChild(displayNote);
-  document.querySelector('.eyebrow').textContent = 'AR PROTOTYPE · ' + revision;
-  ui.place.textContent = '推定地面に置く';
+  document.querySelector('.eyebrow').textContent = 'Roll-by-Blow · ' + revision;
+  ui.place.textContent = '自動配置を待っています';
   ui.reticle.style.left = groundSettings.screenX * 100 + '%';
   ui.reticle.style.top = groundSettings.screenY * 100 + '%';
   const state = {
@@ -58,7 +59,7 @@
     stableSince: 0, lastHitAt: 0, lastHitCheck: 0,
     placed: false, pendingAt: 0, startedAt: 0, lastReport: null, firstNormalAt: 0,
     lastTracking: '', hitType: '', error: '', viewportWidth: 0, viewportHeight: 0,
-    placementMode: 'ground-estimate', displayRequest: false, cameraOnly: false, manualBackground: false,
+    placementMode: 'table-estimate', displayRequest: false, cameraOnly: false, manualBackground: false,
     cameraFeed: {gpuFrames: 0, renderCallbacks: 0, freshVideoFrames: 0,
       texturePresent: false, textureContextMatches: null,
       textureWidth: 0, textureHeight: 0, videoWidth: 0, videoHeight: 0,
@@ -282,12 +283,14 @@
   function clearPlacement() {
     state.placed = false;
     state.pendingAt = 0;
-    state.placementMode = 'ground-estimate';
+    state.placementMode = 'table-estimate';
     state.ground.reason = 'not-started';
     state.ground.atPlacement = null;
     state.displayRequest = false;
     send('ClearPlacement');
     resetCandidate();
+    if (tableEstimator) tableEstimator.reset();
+    configureWorldPoints(true);
   }
 
   function setProjection(width, height) {
@@ -448,67 +451,37 @@
     return pointValid(direction) ? direction : null;
   }
 
-  function updateCandidate(reality, clock) {
-    if (clock - state.lastHitCheck < 200) return;
-    state.lastHitCheck = clock;
-    const stats = state.ground;
-    stats.cycles++;
-    stats.planeY = groundSettings.planeHeight;
-    stats.cameraHeight = reality.position.y - groundSettings.planeHeight;
-    stats.ray = screenRay(reality);
-    stats.intersection = null;
-    stats.distance = null;
-    stats.stableSeconds = 0;
-    function reject(reason) {
-      resetCandidate();
-      state.hitType = '';
-      stats.rejected[reason] = (stats.rejected[reason] || 0) + 1;
-      groundReason(reason, clock);
-    }
-    if (!stats.ray) { reject('invalid-ray'); return; }
-    if (stats.cameraHeight < groundSettings.minimumCameraHeight) { reject('camera-below-estimated-ground'); return; }
-    if (stats.ray.y >= -1e-5) { reject('look-down'); return; }
-    const range = (groundSettings.planeHeight - reality.position.y) / stats.ray.y;
-    stats.distance = range;
-    if (!finite(range) || range < state.config.minimumDistance || range > state.config.maximumDistance) {
-      reject('outside-distance-range'); return;
-    }
-    const point = {x: reality.position.x + stats.ray.x * range,
-      y: groundSettings.planeHeight, z: reality.position.z + stats.ray.z * range};
-    stats.intersection = point;
-    stats.accepted++;
-    state.lastHitAt = clock;
-    if (!state.stableOrigin || distance(state.stableOrigin, point) > state.config.stableRadius) {
-      state.stableOrigin = copyPoint(point);
-      state.stableMean = copyPoint(point);
-      state.stableCount = 1;
-      state.stableSince = clock;
-    } else {
-      state.stableCount++;
-      ['x', 'y', 'z'].forEach(function (axis) {
-        state.stableMean[axis] += (point[axis] - state.stableMean[axis]) / state.stableCount;
-      });
-    }
-    stats.stableSeconds = (clock - state.stableSince) / 1000;
-    // This type is a project label, not a value returned by XR8.hitTest.
-    state.hitType = 'SDK_GROUND_ESTIMATE';
-    state.candidate = {position: copyPoint(state.stableMean), type: state.hitType,
-      distance: distance(state.stableMean, reality.position)};
-    frame[26] = 1;
-    frame[27] = state.candidate.position.x;
-    frame[28] = state.candidate.position.y;
-    frame[29] = state.candidate.position.z;
-    frame[30] = 0; frame[31] = 0; frame[32] = 0; frame[33] = 1;
-    frame[34] = state.candidate.distance;
-    frame[35] = stats.stableSeconds >= state.config.stableSeconds
-      && clock - state.normalSince >= groundSettings.normalSeconds * 1000 ? 1 : 0;
-    if (frame[35] > 0.5 && state.recognition && state.recognition.firstReadySeconds === null) {
-      state.recognition.firstReadySeconds = (clock - state.recognition.startedClock) / 1000;
-      record('first-placement-ready', {seconds: state.recognition.firstReadySeconds});
-    }
-    groundReason(frame[35] > 0.5 ? 'ready' : 'stabilizing', clock);
+  function configureWorldPoints(enabled) {
+    if (!state.modulesAdded || !window.XR8) return;
+    try { XR8.XrController.configure({enableWorldPoints: enabled}); }
+    catch (error) { record('world-points-config', String(error)); }
   }
 
+  function updateCandidate(reality, clock) {
+    if (!tableEstimator || clock - state.lastHitCheck < 250) return;
+    state.lastHitCheck = clock;
+    const fit = tableEstimator.observe(reality, clock);
+    state.surface = tableEstimator.snapshot();
+    resetCandidate();
+    if (!fit) return;
+    state.candidate = fit;
+    state.lastHitAt = clock;
+    state.hitType = fit.type;
+    frame[26] = 1;
+    frame[27] = fit.position.x; frame[28] = fit.position.y; frame[29] = fit.position.z;
+    frame[30] = 0; frame[31] = 0; frame[32] = 0; frame[33] = 1;
+    frame[34] = fit.distance;
+    frame[35] = fit.ready && clock - state.normalSince >= 1000 ? 1 : 0;
+    if (frame[35] > .5 && !state.pendingAt && !state.placed && !state.cameraOnly) {
+      if (state.recognition && state.recognition.firstReadySeconds === null)
+        state.recognition.firstReadySeconds = (clock - state.recognition.startedClock) / 1000;
+      state.placementMode = 'table-estimate';
+      state.ground.atPlacement = state.surface;
+      state.pendingAt = clock;
+      send('PlaceFromBrowser', JSON.stringify({position:fit.position,sizeMeters:fit.sizeMeters,facing:fit.facing}));
+      record('auto-place-request', {position:fit.position,sizeMeters:fit.sizeMeters,surface:state.surface});
+    }
+  }
 
   function onUpdate(result) {
     if (state.phase !== 'running') return;
@@ -556,6 +529,7 @@
     } else {
       state.normalSince = 0;
       resetCandidate();
+      if (tableEstimator) tableEstimator.reset();
     }
     const status = String(reality.trackingStatus) + '/' + String(reality.trackingReason);
     if (status !== state.lastTracking) { record('tracking', status); state.lastTracking = status; }
@@ -564,7 +538,7 @@
   function addModules() {
     if (state.modulesAdded) return;
     XR8.XrController.configure({
-      disableWorldTracking: false, enableLighting: false, enableWorldPoints: false,
+      disableWorldTracking: false, enableLighting: false, enableWorldPoints: true,
       leftHandedAxes: false, mirroredDisplay: false, scale: 'absolute'
     });
     XR8.addCameraPipelineModules([
@@ -697,7 +671,7 @@
     cameraOnly.textContent = state.cameraOnly ? 'キャラと重ねる表示に戻す' : 'カメラ映像だけ表示';
     redraw.disabled = !running;
     redraw.textContent = state.manualBackground ? '再描画をやめる' : '映像の再描画を試す';
-    ui.place.hidden = !running || state.placed;
+    ui.place.hidden = true;
     ui.place.disabled = !ready;
     ui.start.hidden = running || state.phase === 'starting';
     if (state.phase !== 'error') {
@@ -711,33 +685,20 @@
     displayCheck.disabled = !normal || state.placed || !!state.pendingAt;
     const labels = {loading: '準備中', ready: '準備完了', starting: '開始中',
       running: state.placed ? (state.placementMode === 'display-check' ? '表示確認中' : '配置済み')
-        : ready ? '推定地面に配置可' : '推定中',
+        : ready ? '自動配置中' : '机を推定中',
       stopped: '終了', paused: '一時停止', error: '確認が必要'};
     ui.phase.textContent = labels[state.phase] || state.phase;
     if (running) {
-      if (state.cameraOnly)
-        message('現実のカメラ映像だけを確認しています。', '現実の映像が見えるか確認してください。見えなければ「映像の再描画を試す」を押してください。');
-      else if (initializing && recognitionSeconds >= 20)
-        message('認識に時間がかかっています。', '立ったまま、明るく模様のある床へ向けて前後にゆっくり動かしてください。白一色や反射する場所は避け、別の床も映してください。');
-      else if (initializing)
-        message('立ったまま、端末を前へ出して戻してください。', '胸元の高さで床へ斜めに向け、20〜30cmほどゆっくり前後に動かします。認識できたら動きを止めます。');
-      else if (!normal) message('空間の追跡を安定させています。', '立ったまま床を映し、端末をゆっくり前後に動かしてください。');
+      if (state.cameraOnly) message('カメラ映像だけを確認しています。', 'AR操作へ戻ると重ね合わせます。');
       else if (state.placed && state.placementMode === 'display-check')
-        message('床判定を使わない表示確認中です。', '仮キャラクターが見えるか確認してください。この結果は床認識の成功を意味しません。');
-      else if (state.placed) message('推定地面に配置しました。', '実際の床と足元が合うか、黄色の枠が1mかを確認してください。まだ実寸と固定精度の評価中です。');
-      else if (state.pendingAt) message('Unityへ配置を伝えています。');
-      else if (ready) message('推定地面の位置が安定しました。', '「推定地面に置く」を押してください。実際の床への一致は配置後に確認します。');
-      else if (state.candidate) message('同じ場所を少し映し続けてください。', '配置位置が安定するとボタンが有効になります。');
-      else if (state.ground.reason === 'look-down')
-        message('照準を足元寄りの床へ向けてください。', '照準が推定地面へ届くと、配置用の小さい枠が出ます。');
-      else if (state.ground.reason === 'outside-distance-range') {
-        if (state.ground.distance > state.config.maximumDistance)
-          message('端末の高さを保ち、もう少し下を向けてください。', 'スマホを床に近づけず、手前の床へ照準を向けます。高い位置では、より下向きにすると届きやすくなります。');
-        else message('床の少し遠い場所へ照準を向けてください。', '端末の高さを保ち、照準を少し前へ動かしてください。');
-      }
-      else if (state.ground.reason === 'camera-below-estimated-ground')
-        message('地面の推定がまだ安定していません。', '明るく模様のある床を映してゆっくり移動し、続く場合は「認識し直す」を押してください。');
-      else message('照準を置きたい床へ向けてください。', 'この版はSDKの推定地面を使います。実際の床への一致と実寸はこれから確認します。');
+        message('表示だけの確認中です。', 'この配置は机の認識結果ではありません。「置き直す」で自動推定へ戻れます。');
+      else if (state.placed) message('スマホをブロアーにして球を誘導しよう。', 'スマホの位置と向きで狙い、ボタンを押している間だけ風が出ます。移動は半歩程度で。');
+      else if (state.pendingAt) message('推定した場所へ自動配置しています。');
+      else if (initializing) message(recognitionSeconds >= 20 ? '認識に時間がかかっています。' : '机全体を映して、端末をゆっくり前後へ。',
+        '明るく模様のある机を使い、20〜30cmほど前後へ動かしてください。白一色・光沢の強い場所は推定しにくくなります。');
+      else if (!normal) message('空間の追跡を待っています。', '机を映しながら端末をゆっくり動かしてください。');
+      else if (state.surface.reason === 'stabilizing') message('置ける範囲を確認しています。', '机全体を画面に入れてください。条件が整うとサイズを合わせて自動配置します。');
+      else message('机の水平な範囲を探しています。', '机全体を映し、半歩以内で視点を少し変えてください。配置とサイズの操作は不要です。');
     }
     const report = state.lastReport;
     const position = state.latest && state.latest.position;
@@ -760,7 +721,8 @@
       '状態: ' + state.phase,
       '確認モード: ' + state.placementMode,
       '追跡: ' + state.lastTracking,
-      '配置方式: SDKの推定地面（実寸・床への一致は評価中）',
+      '配置方式: 水平点群の範囲推定（机の縁・実寸は評価中）',
+      '机推定: ' + JSON.stringify(state.surface),
       '地面のY座標: ' + state.ground.planeY + 'm',
       '推定カメラ高: ' + (finite(state.ground.cameraHeight) ? state.ground.cameraHeight.toFixed(2) + 'm' : '—'),
       '判定: ' + state.ground.reason,
@@ -821,18 +783,6 @@
     updateUi();
     scheduleView('after-redraw-change');
   });
-  ui.place.addEventListener('click', function () {
-    if (ui.place.disabled || !state.candidate || now() - state.lastHitAt > 300) return;
-    const point = copyPoint(state.candidate.position);
-    state.placementMode = 'ground-estimate';
-    state.ground.atPlacement = {time: new Date().toISOString(), source: state.ground.source,
-      camera: copyPoint(state.latest.position), point: point, planeY: groundSettings.planeHeight,
-      distance: state.candidate.distance, stableSeconds: state.ground.stableSeconds};
-    state.pendingAt = now();
-    send('PlaceFromBrowser', JSON.stringify({position: point}));
-    record('place-request', {position: point, surface: state.candidate.type});
-    updateUi();
-  });
   displayCheck.addEventListener('click', function () {
     if (displayCheck.disabled || !state.latest || !quatValid(state.latest.rotation)) return;
     const q = state.latest.rotation;
@@ -866,7 +816,8 @@
   ui.stop.addEventListener('click', stop);
   ui.download.addEventListener('click', function () {
     const payload = {
-      prototype: 'ARFloorPrototype-' + revision, savedAt: new Date().toISOString(),
+      prototype: 'ARRollCapture-' + revision, savedAt: new Date().toISOString(),
+      game: window.RollCaptureBridge ? RollCaptureBridge.snapshot() : null,
       page: location.origin + location.pathname, userAgent: navigator.userAgent,
       viewport: {width: innerWidth, height: innerHeight, pixelRatio: pixelRatio},
       phase: state.phase, config: state.config, tracking: state.lastTracking,
@@ -916,6 +867,13 @@
 
   window.FloorProbeBridge = {
     pixelRatio: pixelRatio,
+    gameCommand: function (method) {
+      if (method === 'ResetBall') send(method);
+    },
+    gameIsActive: function () {
+      return state.phase === 'running' && state.placed && !state.cameraOnly
+        && now() - state.lastPoseAt < 350 && frame[2] > .5;
+    },
     captureContext: function (kind, context) {
       if (context && (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl')) {
         unityGl = context;
@@ -924,13 +882,15 @@
     },
     register: function (config) {
       state.config = config;
-      if (!config.supportsRecognitionBudget) {
-        fail('Unity本体の更新が必要です。', '0.1.7はソースを更新して再ビルドし、Buildも公開してください。');
+      tableEstimator = window.RollTableEstimator ? RollTableEstimator(config) : null;
+      if (!config.supportsRecognitionBudget || config.playerRevision !== revision) {
+        fail('Unity本体の更新が必要です。', 'Roll Captureのソースから再ビルドし、Buildも公開してください。');
         return;
       }
+      if (!tableEstimator) { fail('机の推定処理を読み込めませんでした。', 'table-placement.jsも公開してください。'); return; }
       state.registered = true;
       configureUnityBudget();
-      ui.dimensions.textContent = 'キャラクター ' + Math.round(config.characterHeight * 100) + 'cm · 比較枠 ' + config.referenceSize + 'm四方';
+      ui.dimensions.textContent = '机の範囲から配置と大きさを自動で推定します';
       record('unity-registered', config);
       maybeReady();
     },
@@ -956,6 +916,7 @@
       // Only Unity acknowledges placement; a browser request is not proof of success.
       if (state.pendingAt && value.placed) {
         state.placed = true; state.pendingAt = 0;
+        configureWorldPoints(false);
         state.displayRequest = false;
         frame[35] = 0;
         state.placementHistory.push({time: new Date().toISOString(), mode: state.placementMode,
@@ -965,7 +926,7 @@
       } else if (state.pendingAt && now() - state.pendingAt > 1500) {
         state.pendingAt = 0;
         state.displayRequest = false;
-        state.placementMode = 'ground-estimate';
+        state.placementMode = 'table-estimate';
         frame[35] = 0;
         record('place-rejected', 'Unity did not acknowledge placement.');
       }

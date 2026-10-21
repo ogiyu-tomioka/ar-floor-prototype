@@ -45,3 +45,18 @@ body.active #reticle { display: block; }
 body.placed #reticle { display: none; }
 body.ready #reticle { border-color: #b5f2d3; box-shadow: 0 0 0 4px #b5f2d330; }
 @media (max-height: 650px) { .panel { padding: 11px 13px; } h1 { font-size: 18px; } .eyebrow { display: none; } .bottom { max-height: 45%; } p { font-size: 12px; margin-top: 7px; } }
+body.roll-playing .bottom { display: none; }
+body.roll-playing.roll-tools-open .bottom { display: block; bottom: calc(175px + env(safe-area-inset-bottom)); max-height: 35%; }
+#roll-controls { position: fixed; inset: auto 14px calc(12px + env(safe-area-inset-bottom)); z-index: 4; pointer-events: none; }
+.roll-hud { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; margin-bottom: 10px; }
+.roll-hud button { pointer-events: auto; background: #102923ee; }
+#roll-notice { padding: 7px 10px; border-radius: 10px; font-size: 12px; background: #102923dd; width: 100%; }
+#roll-book { width: min(90vw,440px); max-height: 70vh; overflow: auto; color: #f1faf7; background: #102923; border: 1px solid #b5f2d3; border-radius: 18px; padding: 20px; }
+#roll-book::backdrop { background: #0009; }
+#roll-book h2 { font-size: 19px; margin: 0 0 14px; }
+#roll-book button { margin: 12px 6px 0 0; }
+#roll-blow { pointer-events: auto; display: block; margin-left: auto; width: 180px; height: 72px; border: 2px solid #d4f8e9aa; border-radius: 36px; background: #102923ee; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; font-size: 16px; font-weight: 700; }
+#roll-blow[aria-pressed="true"] { background: #e6bb65; color: #102923; }
+body.roll-tools-open #roll-blow { opacity: .3; pointer-events: none; }
+body.roll-playing .top #status { display: none; }
+body.roll-playing .top { padding-top: 9px; padding-bottom: 9px; }
