@@ -1,7 +1,8 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.1.6';
+  const revision = '0.1.7';
+  const recognitionLoadMode = new URLSearchParams(location.search).get('load') === 'baseline' ? 'baseline' : 'reduced';
   // SDK absolute mode estimates y=0 as ground; this is not a detected plane mesh.
   const groundSettings = {planeHeight: 0, screenX: 0.5, screenY: 0.5,
     minimumCameraHeight: 0.15, normalSeconds: 1};
@@ -52,7 +53,7 @@
   const state = {
     phase: 'loading', engineReady: false, unity: null, registered: false, modulesAdded: false,
     config: null, latest: null, lastPoseAt: 0, sequence: 0, normalSince: 0,
-    recognition: null, recognitionHistory: [], motionPermission: [],
+    recognition: null, recognitionHistory: [], motionPermission: [], placementHistory: [],
     candidate: null, stableOrigin: null, stableMean: null, stableCount: 0,
     stableSince: 0, lastHitAt: 0, lastHitCheck: 0,
     placed: false, pendingAt: 0, startedAt: 0, lastReport: null, firstNormalAt: 0,
@@ -111,6 +112,14 @@
   function useArCamera() {
     // The original 0.1.0 player has no diagnostic modes. 0.1.2 does.
     if (state.config && state.config.playerRevision === '0.1.2') send('SetRenderMode', 'ar');
+  }
+
+  function configureUnityBudget() {
+    // Defer the call until Unity's registration callback has returned.
+    setTimeout(function () {
+      if (state.unity && state.registered && state.config.supportsRecognitionBudget)
+        send('SetRecognitionLoad', recognitionLoadMode);
+    }, 0);
   }
 
   function describeContext(gl) {
@@ -317,6 +326,7 @@
     state.lastTracking = '';
     state.recognition = {reason: reason, startedAt: new Date().toISOString(),
       startedClock: clock, updates: 0, invalidPoses: 0, trackingCounts: {},
+      loadMode: recognitionLoadMode, firstReadySeconds: null,
       firstPoseSeconds: null, firstNormalSeconds: null, firstSample: null,
       firstNormalSample: null, samples: [], lastSampleClock: 0,
       sdkCoaching: 'not-received', motion: {events: 0, lastEventSeconds: null,
@@ -344,7 +354,10 @@
       sdkHeight: height,
       aimDownDegrees: ray ? Math.asin(Math.max(-1, Math.min(1, -ray.y))) * 180 / Math.PI : null,
       estimatedGroundDistance: ray && ray.y < -1e-5 && height > 0 ? -height / ray.y : null,
-      motionEvents: stats.motion.events};
+      motionEvents: stats.motion.events,
+      unityUpdateFps: state.lastReport ? state.lastReport.fps : null,
+      unityTargetFrameRate: state.lastReport ? state.lastReport.targetFrameRate : null,
+      unityVSyncCount: state.lastReport ? state.lastReport.vSyncCount : null};
     if (!stats.firstSample) stats.firstSample = sample;
     if (firstNormal) {
       stats.firstNormalSample = sample;
@@ -489,6 +502,10 @@
     frame[34] = state.candidate.distance;
     frame[35] = stats.stableSeconds >= state.config.stableSeconds
       && clock - state.normalSince >= groundSettings.normalSeconds * 1000 ? 1 : 0;
+    if (frame[35] > 0.5 && state.recognition && state.recognition.firstReadySeconds === null) {
+      state.recognition.firstReadySeconds = (clock - state.recognition.startedClock) / 1000;
+      record('first-placement-ready', {seconds: state.recognition.firstReadySeconds});
+    }
     groundReason(frame[35] > 0.5 ? 'ready' : 'stabilizing', clock);
   }
 
@@ -727,6 +744,10 @@
     const unityPosition = report && report.camera;
     let lines = [
       '版: ' + revision,
+      'Unity本体: ' + (state.config ? state.config.playerRevision || '旧版' : '未受信'),
+      '認識負荷: ' + (recognitionLoadMode === 'baseline' ? '比較用・通常' : '軽減'),
+      'Unity目標: ' + (report && finite(report.targetFrameRate) ? report.targetFrameRate + ' fps' : '—'),
+      'Unity VSync: ' + (report && finite(report.vSyncCount) ? report.vSyncCount : '—'),
       '透過補正: ' + (unityAlpha.installed ? (unityAlpha.enabled ? '有効' : '無効') : '未設定'),
       '不透明化の抑制: ' + unityAlpha.preventedClears + '回',
       '表示: ' + (state.cameraOnly ? '現実の映像のみ' : 'キャラとの重ね合わせ'),
@@ -852,6 +873,7 @@
       hitType: state.hitType, unity: state.lastReport, error: state.error,
       placementMode: state.placementMode, surfaceDiagnostics: state.surface,
       groundSettings: groundSettings, groundDiagnostics: state.ground,
+      recognitionLoadMode: recognitionLoadMode, placementHistory: state.placementHistory.slice(),
       recognitionDiagnostics: state.recognition, recognitionHistory: state.recognitionHistory.slice(),
       motionPermission: state.motionPermission,
       cameraOnly: state.cameraOnly, manualBackground: state.manualBackground,
@@ -902,12 +924,22 @@
     },
     register: function (config) {
       state.config = config;
+      if (!config.supportsRecognitionBudget) {
+        fail('Unity本体の更新が必要です。', '0.1.7はソースを更新して再ビルドし、Buildも公開してください。');
+        return;
+      }
       state.registered = true;
+      configureUnityBudget();
       ui.dimensions.textContent = 'キャラクター ' + Math.round(config.characterHeight * 100) + 'cm · 比較枠 ' + config.referenceSize + 'm四方';
       record('unity-registered', config);
       maybeReady();
     },
-    setUnity: function (instance) { state.unity = instance; record('unity-ready', true); maybeReady(); },
+    setUnity: function (instance) {
+      state.unity = instance;
+      configureUnityBudget();
+      record('unity-ready', true);
+      maybeReady();
+    },
     readFrame: function () {
       if (state.phase !== 'running' || now() - state.lastPoseAt > 350) {
         frame[1] = 0; frame[2] = 0; frame[26] = 0; frame[35] = 0;
@@ -926,6 +958,9 @@
         state.placed = true; state.pendingAt = 0;
         state.displayRequest = false;
         frame[35] = 0;
+        state.placementHistory.push({time: new Date().toISOString(), mode: state.placementMode,
+          loadMode: recognitionLoadMode, ground: state.ground.atPlacement, anchor: value.anchor});
+        if (state.placementHistory.length > 12) state.placementHistory.shift();
         record('place-acknowledged', {position: value.anchor, mode: state.placementMode});
       } else if (state.pendingAt && now() - state.pendingAt > 1500) {
         state.pendingAt = 0;

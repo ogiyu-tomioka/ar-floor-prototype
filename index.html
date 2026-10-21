@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
   <title>ARの床置きテスト</title>
-  <link rel="stylesheet" href="probe.css?v=0.1.6">
+  <link rel="stylesheet" href="probe.css?v=0.1.7">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
@@ -43,7 +43,7 @@
   <!-- This product includes the XR Engine software developed by Niantic Spatial, Inc.
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
-  <script src="probe.js?v=0.1.6"></script>
+  <script src="probe.js?v=0.1.7"></script>
   <script>
     (function () {
       const unityCanvas = document.getElementById('unity-canvas');
@@ -64,7 +64,7 @@
         streamingAssetsUrl: 'StreamingAssets',
         companyName: "LocalPrototype",
         productName: "AR Floor Prototype",
-        productVersion: "0.1.0",
+        productVersion: "0.1.7",
         devicePixelRatio: FloorProbeBridge.pixelRatio,
         webglContextAttributes: {alpha: true, premultipliedAlpha: true},
         showBanner: function (message, type) { FloorProbeBridge.banner(message, type); },
@@ -89,6 +89,3 @@
   </script>
 </body>
 </html>
-
-
-
