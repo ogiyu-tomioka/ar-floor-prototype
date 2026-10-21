@@ -1,7 +1,12 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.3.0';
+  const revision = '0.3.1';
+  const budgetArLoop = new URLSearchParams(location.search).get('xrloop') !== 'engine';
+  const poseGuard = window.RollPoseGuard ? RollPoseGuard() : null;
+  let arLoopId = 0, nextArFrame = 0, lastGuardEvent = 0, lastOrientationSample = 0;
+  let deviceOrientation = null;
+  const arBudget = {mode:budgetArLoop?'budget':'engine',targetFps:30,frames:0,measuredFps:0,windowFrames:0,windowStart:0};
   let tableEstimator = null;
   const recognitionLoadMode = new URLSearchParams(location.search).get('load') === 'baseline' ? 'baseline' : 'reduced';
   // SDK absolute mode estimates y=0 as ground; this is not a detected plane mesh.
@@ -91,6 +96,7 @@
   function fail(text, error) {
     state.error = text + (error ? ' ' + String(error.message || error) : '');
     state.phase = 'error';
+    stopArLoop();
     frame[1] = 0;
     frame[2] = 0;
     frame[35] = 0;
@@ -202,6 +208,7 @@
 
   function saveView(reason) {
     viewHistory.push({time: new Date().toISOString(), reason: reason,
+      poseGuard: poseGuard ? poseGuard.snapshot() : null, deviceOrientation:deviceOrientation, arBudget:arBudget,
       cameraOnly: state.cameraOnly, manualBackground: state.manualBackground,
       cameraFeed: Object.assign({}, state.cameraFeed), browserRendering: browserRendering(),
       unity: state.lastReport});
@@ -239,9 +246,9 @@
     stats.videoTime = cameraFrame.videoTime;
   }
 
-  function drawCameraFrame() {
+  function drawCameraFrame(force) {
     state.cameraFeed.renderCallbacks++;
-    if (!state.manualBackground || !xrGl || !latestCameraFrame
+    if ((!state.manualBackground && force !== true) || !xrGl || !latestCameraFrame
         || !latestCameraFrame.cameraTexture || state.cameraFeed.manualError || xrGl.isContextLost()) return;
     let restore;
     try {
@@ -290,15 +297,16 @@
     send('ClearPlacement');
     resetCandidate();
     if (tableEstimator) tableEstimator.reset();
+    if (poseGuard) poseGuard.reset();
     configureWorldPoints(true);
   }
 
   function setProjection(width, height) {
     if (!width || !height) return;
-    XR8.XrController.updateCameraProjectionMatrix({
-      cam: {pixelRectWidth: width, pixelRectHeight: height, nearClipPlane: 0.05, farClipPlane: 30},
-      origin: {x: 0, y: 1.5, z: 0}, facing: {x: 0, y: 0, z: 0, w: 1}
-    });
+    const options = {cam: {pixelRectWidth: width, pixelRectHeight: height, nearClipPlane: 0.05, farClipPlane: 30}};
+    // Keep the same starting reference; a viewport change must not recenter the world.
+    options.origin = {x:0,y:1.5,z:0}; options.facing = {x:0,y:0,z:0,w:1};
+    XR8.XrController.updateCameraProjectionMatrix(options);
   }
 
   function resizeCanvas() {
@@ -360,7 +368,9 @@
       motionEvents: stats.motion.events,
       unityUpdateFps: state.lastReport ? state.lastReport.fps : null,
       unityTargetFrameRate: state.lastReport ? state.lastReport.targetFrameRate : null,
-      unityVSyncCount: state.lastReport ? state.lastReport.vSyncCount : null};
+      unityVSyncCount: state.lastReport ? state.lastReport.vSyncCount : null,
+      rotation: poseValid ? Object.assign({},reality.rotation) : null,
+      deviceOrientation:deviceOrientation,poseGuard:poseGuard ? poseGuard.snapshot().reason : 'missing'};
     if (!stats.firstSample) stats.firstSample = sample;
     if (firstNormal) {
       stats.firstNormalSample = sample;
@@ -483,6 +493,46 @@
     }
   }
 
+  function stopArLoop() {
+    if (arLoopId) cancelAnimationFrame(arLoopId);
+    arLoopId = 0; nextArFrame = 0;
+  }
+  function startArLoop() {
+    if (!budgetArLoop || arLoopId) return;
+    arBudget.windowFrames = 0; arBudget.windowStart = 0;
+    function tick(clock) {
+      arLoopId = 0;
+      if (state.phase !== 'running' || document.hidden) return;
+      const period = 1000 / arBudget.targetFps;
+      if (!nextArFrame || clock + .25 >= nextArFrame) {
+        nextArFrame = clock + period - (nextArFrame ? Math.max(0,clock-nextArFrame)%period : 0);
+        try {
+          XR8.runPreRender(Date.now());
+          try {
+            drawCameraFrame(true);
+            if (state.cameraFeed.manualError) throw new Error(state.cameraFeed.manualError);
+          }
+          finally { XR8.runPostRender(); }
+          arBudget.frames++; arBudget.windowFrames++;
+          if (!arBudget.windowStart) arBudget.windowStart = clock;
+          if (clock - arBudget.windowStart >= 1000) {
+            arBudget.measuredFps = arBudget.windowFrames * 1000 / (clock-arBudget.windowStart);
+            arBudget.windowFrames = 0; arBudget.windowStart = clock;
+          }
+        } catch (error) { fail('AR処理が中断されました。', error); return; }
+      }
+      arLoopId = requestAnimationFrame(tick);
+    }
+    arLoopId = requestAnimationFrame(tick);
+  }
+
+  window.addEventListener('deviceorientation', function (event) {
+    if (state.phase !== 'running' || now()-lastOrientationSample < 100) return;
+    lastOrientationSample = now();
+    deviceOrientation = {alpha:event.alpha,beta:event.beta,gamma:event.gamma,
+      screenAngle:screen.orientation ? screen.orientation.angle : window.orientation,clock:now()};
+  }, {passive:true});
+
   function onUpdate(result) {
     if (state.phase !== 'running') return;
     const background = result.processGpuResult && result.processGpuResult.gltexturerenderer;
@@ -500,13 +550,25 @@
     const clock = now();
     const poseValid = !!(reality && pointValid(reality.position) && quatValid(reality.rotation) && projectionValid);
     observeRecognition(reality, poseValid, clock);
+    const status = reality ? String(reality.trackingStatus) + '/' + String(reality.trackingReason) : 'no-reality';
+    if (status !== state.lastTracking) { record('tracking', status); state.lastTracking = status; }
     if (!poseValid) {
+      if (poseGuard && state.placed) poseGuard.invalidate('invalid-pose');
       frame[1] = 0; frame[2] = 0;
       state.normalSince = 0;
       resetCandidate();
       return;
     }
     state.latest = reality;
+    if (poseGuard && !poseGuard.observe(reality, clock, state.placed || !!state.pendingAt)) {
+      frame[1] = 0; frame[2] = 0; state.normalSince = 0; resetCandidate();
+      if (tableEstimator) tableEstimator.reset();
+      const guard = poseGuard.snapshot();
+      if (guard.blocked && clock-lastGuardEvent >= 2000) {
+        lastGuardEvent = clock; record('pose-rejected', {guard:guard,deviceOrientation:deviceOrientation});
+      }
+      return;
+    }
     state.lastPoseAt = clock;
     const normal = trackingNormal(reality);
     frame[0] = ++state.sequence;
@@ -531,8 +593,6 @@
       resetCandidate();
       if (tableEstimator) tableEstimator.reset();
     }
-    const status = String(reality.trackingStatus) + '/' + String(reality.trackingReason);
-    if (status !== state.lastTracking) { record('tracking', status); state.lastTracking = status; }
   }
 
   function addModules() {
@@ -563,6 +623,7 @@
           setProjection(result.canvasWidth, result.canvasHeight);
           state.phase = 'running';
           beginRecognition('camera-start');
+          startArLoop();
           record('camera-start', {width: result.canvasWidth, height: result.canvasHeight,
             cameraFeed: Object.assign({}, state.cameraFeed), browserRendering: browserRendering()});
           scheduleView('camera-started');
@@ -572,19 +633,15 @@
         onUpdate: onUpdate,
         onProcessGpu: inspectCameraFrame,
         onRender: drawCameraFrame,
-        onDetach: destroyManualRenderer,
+        onDetach: function () { stopArLoop(); destroyManualRenderer(); },
         onCanvasSizeChange: function (result) {
           if (state.phase !== 'running') return;
           if (state.viewportWidth === result.canvasWidth && state.viewportHeight === result.canvasHeight) return;
           state.viewportWidth = result.canvasWidth;
           state.viewportHeight = result.canvasHeight;
-          clearPlacement();
-          frame[1] = 0; frame[2] = 0;
-          state.normalSince = 0;
           setProjection(result.canvasWidth, result.canvasHeight);
-          XR8.XrController.recenter();
-          beginRecognition('viewport-reset');
-          record('viewport-reset', {width: result.canvasWidth, height: result.canvasHeight});
+          record('viewport-change', {width:result.canvasWidth,height:result.canvasHeight,
+            preservedPlacement:state.placed,deviceOrientation:deviceOrientation});
         },
         onCameraStatusChange: function (result) {
           record('camera', {status: result.status});
@@ -631,9 +688,10 @@
         XR8.XrController.recenter();
         state.phase = 'running';
         beginRecognition('resume');
+        startArLoop();
         record('resume', 'Placement cleared; rescan required.');
       } else {
-        XR8.run({canvas: canvas, webgl2: true, ownRunLoop: true,
+        XR8.run({canvas: canvas, webgl2: true, ownRunLoop: !budgetArLoop,
           allowedDevices: XR8.XrConfig.device().MOBILE,
           cameraConfig: {direction: XR8.XrConfig.camera().BACK},
           glContextConfig: {alpha: false, antialias: false, preserveDrawingBuffer: false}});
@@ -643,6 +701,7 @@
   }
 
   function stop() {
+    stopArLoop();
     if (window.XR8 && state.modulesAdded) XR8.stop();
     clearPlacement();
     frame.fill(0);
@@ -669,8 +728,8 @@
     document.body.classList.toggle('camera-only', state.cameraOnly);
     cameraOnly.disabled = !running;
     cameraOnly.textContent = state.cameraOnly ? 'キャラと重ねる表示に戻す' : 'カメラ映像だけ表示';
-    redraw.disabled = !running;
-    redraw.textContent = state.manualBackground ? '再描画をやめる' : '映像の再描画を試す';
+    redraw.disabled = !running || budgetArLoop;
+    redraw.textContent = budgetArLoop ? '省電力方式で映像を描画中' : state.manualBackground ? '再描画をやめる' : '映像の再描画を試す';
     ui.place.hidden = true;
     ui.place.disabled = !ready;
     ui.start.hidden = running || state.phase === 'starting';
@@ -690,6 +749,8 @@
     ui.phase.textContent = labels[state.phase] || state.phase;
     if (running) {
       if (state.cameraOnly) message('カメラ映像だけを確認しています。', 'AR操作へ戻ると重ね合わせます。');
+      else if (state.placed && !normal) message('追跡を確認しています。ゲームは一時停止中です。',
+        '机を映したまま姿勢を戻してください。戻らない場合はAR操作から「認識し直す」を押してください。');
       else if (state.placed && state.placementMode === 'display-check')
         message('表示だけの確認中です。', 'この配置は机の認識結果ではありません。「置き直す」で自動推定へ戻れます。');
       else if (state.placed) message('スマホをブロアーにして球を誘導しよう。', 'スマホの位置と向きで狙い、ボタンを押している間だけ風が出ます。移動は半歩程度で。');
@@ -705,6 +766,8 @@
     const unityPosition = report && report.camera;
     let lines = [
       '版: ' + revision,
+      'AR更新: ' + (budgetArLoop ? arBudget.measuredFps.toFixed(1) + ' fps（目標 ' + arBudget.targetFps + '）' : 'SDK標準ループ'),
+      '姿勢の保護: ' + (poseGuard ? poseGuard.snapshot().reason : 'missing'),
       'Unity本体: ' + (state.config ? state.config.playerRevision || '旧版' : '未受信'),
       '認識負荷: ' + (recognitionLoadMode === 'baseline' ? '比較用・通常' : '軽減'),
       'Unity目標: ' + (report && finite(report.targetFrameRate) ? report.targetFrameRate + ' fps' : '—'),
@@ -849,6 +912,7 @@
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden || (state.phase !== 'running' && state.phase !== 'starting')) return;
     clearPlacement();
+    stopArLoop();
     if (window.XR8 && state.modulesAdded) XR8.pause();
     frame[1] = 0; frame[2] = 0;
     state.phase = 'paused';
@@ -882,11 +946,13 @@
     },
     register: function (config) {
       state.config = config;
+      arBudget.targetFps = Math.max(30,Math.min(60,config.arProcessingFrameRate || 30));
       tableEstimator = window.RollTableEstimator ? RollTableEstimator(config) : null;
       if (!config.supportsRecognitionBudget || config.playerRevision !== revision) {
         fail('Unity本体の更新が必要です。', 'Roll Captureのソースから再ビルドし、Buildも公開してください。');
         return;
       }
+      if (!poseGuard) { fail('姿勢の保護処理を読み込めませんでした。', 'pose-guard.jsも公開してください。'); return; }
       if (!tableEstimator) { fail('机の推定処理を読み込めませんでした。', 'table-placement.jsも公開してください。'); return; }
       state.registered = true;
       configureUnityBudget();
@@ -902,6 +968,7 @@
     },
     readFrame: function () {
       if (state.phase !== 'running' || now() - state.lastPoseAt > 350) {
+        if (poseGuard && state.placed) poseGuard.invalidate('stale-pose');
         frame[1] = 0; frame[2] = 0; frame[26] = 0; frame[35] = 0;
         state.normalSince = 0;
         resetCandidate();
