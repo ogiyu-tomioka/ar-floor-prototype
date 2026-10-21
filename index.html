@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
   <title>ARの床置きテスト</title>
-  <link rel="stylesheet" href="probe.css?v=0.1.4">
+  <link rel="stylesheet" href="probe.css?v=0.1.5">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
@@ -21,7 +21,7 @@
     <div class="dimensions" id="dimensions">キャラクター 50cm · 比較枠 1m四方</div>
     <p id="guidance">明るく、模様のある床に向けて始めてください。</p>
     <button id="start" class="primary" disabled>読み込み中…</button>
-    <button id="place" class="primary" disabled hidden>ここに置く</button>
+    <button id="place" class="primary" disabled hidden>推定地面に置く</button>
     <div class="actions">
       <button id="replace" disabled>置き直す</button>
       <button id="recenter" disabled>認識し直す</button>
@@ -39,7 +39,7 @@
   <!-- This product includes the XR Engine software developed by Niantic Spatial, Inc.
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
-  <script src="probe.js?v=0.1.4"></script>
+  <script src="probe.js?v=0.1.5"></script>
   <script>
     (function () {
       const unityCanvas = document.getElementById('unity-canvas');
@@ -85,5 +85,6 @@
   </script>
 </body>
 </html>
+
 
 
