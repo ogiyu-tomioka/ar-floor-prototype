@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#102222">
+  <title>ARの床置きテスト</title>
+  <link rel="stylesheet" href="probe.css">
+</head>
+<body>
+  <canvas id="camera-canvas" aria-hidden="true"></canvas>
+  <canvas id="unity-canvas" tabindex="-1" aria-label="ARの仮キャラクターと比較枠"></canvas>
+  <header class="panel top">
+    <div class="eyebrow">AR PROTOTYPE · 01</div>
+    <div class="heading"><h1>床に置いてみる</h1><span id="phase" class="badge">準備中</span></div>
+    <p id="status" role="status" aria-live="polite">表示データを読み込んでいます。</p>
+    <div class="loading" id="loading"><div id="progress"></div></div>
+  </header>
+  <div id="reticle" aria-hidden="true"><span></span></div>
+  <main class="panel bottom">
+    <div class="dimensions" id="dimensions">キャラクター 50cm · 比較枠 1m四方</div>
+    <p id="guidance">明るく、模様のある床に向けて始めてください。</p>
+    <button id="start" class="primary" disabled>読み込み中…</button>
+    <button id="place" class="primary" disabled hidden>ここに置く</button>
+    <div class="actions">
+      <button id="replace" disabled>置き直す</button>
+      <button id="recenter" disabled>認識し直す</button>
+      <button id="stop" disabled>終了</button>
+    </div>
+    <details id="diagnostics">
+      <summary>確認用の詳細</summary>
+      <pre id="metrics">準備中</pre>
+      <p class="note">診断に写真・映像は含まれません。</p>
+      <button id="download">診断を保存</button>
+    </details>
+    <a class="credit" href="external/xr/LICENSE" target="_blank" rel="noopener">XR Engine: Niantic Spatial · License / warranty disclaimer</a>
+  </main>
+  <noscript>この試作にはJavaScriptが必要です。</noscript>
+  <!-- This product includes the XR Engine software developed by Niantic Spatial, Inc.
+       Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
+       License and warranty disclaimer: external/xr/LICENSE -->
+  <script src="probe.js"></script>
+  <script>
+    (function () {
+      const unityCanvas = document.getElementById('unity-canvas');
+      // Scope alpha enforcement to Unity's own canvas; never patch the global prototype.
+      const nativeGetContext = unityCanvas.getContext.bind(unityCanvas);
+      unityCanvas.getContext = function (kind, attributes) {
+        if (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl') {
+          attributes = Object.assign({}, attributes, {alpha: true, premultipliedAlpha: true});
+        }
+        return nativeGetContext(kind, attributes);
+      };
+      const config = {
+        dataUrl: 'Build/Web.data',
+        frameworkUrl: 'Build/Web.framework.js',
+        codeUrl: 'Build/Web.wasm',
+        streamingAssetsUrl: 'StreamingAssets',
+        companyName: "LocalPrototype",
+        productName: "AR Floor Prototype",
+        productVersion: "0.1.0",
+        devicePixelRatio: FloorProbeBridge.pixelRatio,
+        webglContextAttributes: {alpha: true, premultipliedAlpha: true},
+        showBanner: function (message, type) { FloorProbeBridge.banner(message, type); }
+      };
+      const loader = document.createElement('script');
+      loader.src = 'Build/Web.loader.js';
+      loader.onerror = function () { FloorProbeBridge.fail('Unityの読み込みに失敗しました。公開したBuildフォルダーを確認してください。'); };
+      loader.onload = function () {
+        createUnityInstance(unityCanvas, config, FloorProbeBridge.progress)
+          .then(FloorProbeBridge.setUnity)
+          .catch(function (error) { FloorProbeBridge.fail('Unityを起動できませんでした。', error); });
+      };
+      document.body.appendChild(loader);
+      const engine = document.createElement('script');
+      engine.src = 'external/xr/xr.js';
+      engine.async = true;
+      engine.setAttribute('data-preload-chunks', 'slam');
+      engine.onerror = function () { FloorProbeBridge.fail('ARエンジンを読み込めませんでした。externalフォルダーを確認してください。'); };
+      document.body.appendChild(engine);
+    }());
+  </script>
+</body>
+</html>
