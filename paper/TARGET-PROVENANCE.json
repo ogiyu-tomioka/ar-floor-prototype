@@ -1,34 +1,21 @@
 {
-  "revision": "0.3.4",
+  "revision": "0.3.5",
   "generatedOn": "2026-10-22",
   "artwork": "Project-created colour frame and non-repeating grain. No printed game geometry or spawns.",
   "paperWidthMeters": 0.18,
   "activeTargets": [
     {
-      "name": "color-board-left",
-      "data": "paper/image-targets/color-board-left.json",
-      "widthRatio": 0.7501224889759922,
-      "offsetXRatio": -0.1249387555120039,
+      "name": "color-board",
+      "data": "paper/image-targets/color-board.json",
+      "widthRatio": 1,
+      "offsetXRatio": 0,
       "offsetZRatio": 0,
-      "imagePath": "paper/image-targets/color-board-left_luminance.png",
+      "imagePath": "paper/image-targets/color-board_luminance.png",
       "pixels": [
-        480,
+        640,
         640
       ],
-      "sha256": "a4c6f4b44f177b83f09402ed443effe1c658032f35579a7b58043dbeb1193ca5"
-    },
-    {
-      "name": "color-board-right",
-      "data": "paper/image-targets/color-board-right.json",
-      "widthRatio": 0.7501224889759922,
-      "offsetXRatio": 0.12493875551200395,
-      "offsetZRatio": 0,
-      "imagePath": "paper/image-targets/color-board-right_luminance.png",
-      "pixels": [
-        480,
-        640
-      ],
-      "sha256": "ca0d7c1317555b216aa90a97f0b4260d964bb3bad1e1e2d1966b2f5e7621af23"
+      "sha256": "f46e8b2eca0b2d1fcd3b180aa98a0652d7ab17c84c8ed7aab10be30236a66493"
     }
   ],
   "tool": "Official image-target-cli applyCrop; Sharp import adapted to the bundled runtime only.",
@@ -68,5 +55,6 @@
   },
   "runtime": "Existing bundled XR Engine; no engine binary changes; no remote target compilation service.",
   "arRuntimeExecuted": false,
-  "deviceDetectionMeasured": false
+  "deviceDetectionMeasured": false,
+  "trackingNote": "One full-board square crop, accepted by the official CLI crop validation. Portrait dimensions are a best-results recommendation; actual detection still needs a device check."
 }

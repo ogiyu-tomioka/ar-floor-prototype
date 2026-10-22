@@ -28,18 +28,12 @@
   },
   "targets": [
     {
-      "name": "color-board-left",
-      "data": "paper/image-targets/color-board-left.json",
-      "widthRatio": 0.7501224889759922,
-      "offsetXRatio": -0.1249387555120039,
-      "offsetZRatio": 0
-    },
-    {
-      "name": "color-board-right",
-      "data": "paper/image-targets/color-board-right.json",
-      "widthRatio": 0.7501224889759922,
-      "offsetXRatio": 0.12493875551200395,
+      "name": "color-board",
+      "data": "paper/image-targets/color-board.json",
+      "widthRatio": 1,
+      "offsetXRatio": 0,
       "offsetZRatio": 0
     }
-  ]
+  ],
+  "trackingRevision": "0.3.5"
 }

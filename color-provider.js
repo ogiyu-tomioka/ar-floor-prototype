@@ -2,9 +2,11 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
+    const webRevision='0.3.5';
+    const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
-    const frame=new Float32Array(39),legacyFrame=frame.subarray(0,38),events=[];
+    const frame=new Float32Array(39),legacyFrame=frame.subarray(0,38),events=[],poseHistory=[],lifecycle=[];
     const alphaContexts=new WeakSet(),unityAlpha={enabled:true,installed:false,clearCalls:0,alphaOnlyOpaqueClears:0,
       preventedClears:0,preventedDefaultClears:0,preventedOffscreenClears:0,preventedClearBufferCalls:0,error:''};
     const state={phase:'loading',manualBackground:false,cameraFeed:{gpuFrames:0,renderCallbacks:0,freshVideoFrames:0,
@@ -14,26 +16,46 @@
     const visibleTargets=new Set(),targetAnchors=new Map();
     let anchor=null,imageVisible=false,lastAnchorAt=0,lastPoseAt=0,placed=false,placementAt=0,unityReport=null;
     let xrGl=null,latestCameraFrame=null,manualRenderer=null,raf=0,nextTick=0,lastMode='',rawCamera=null,session=0;
+    let startedAt=0,nextPoseSample=0;
     const tracking={source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
-      rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null};
+      rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0};
     const finite=value=>typeof value==='number'&&Number.isFinite(value);
-    const readyData=fetch('paper/stage-layout.json').then(r=>{if(!r.ok)throw Error('用紙設定が見つかりません。');return r.json();})
-      .then(paper=>{layout=paper;return Promise.all(layout.targets.map(t=>fetch(t.data).then(r=>{if(!r.ok)throw Error('カラー枠の認識データが見つかりません。');return r.json();})));})
+    const readyData=fetch('paper/stage-layout.json?v='+webRevision,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('用紙設定が見つかりません。');return r.json();})
+      .then(paper=>{layout=paper;return Promise.all(layout.targets.map(t=>fetch(t.data+'?v='+webRevision,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('カラー枠の認識データが見つかりません。');return r.json();})));})
       .then(data=>{targets=data;for(const target of targets)target.imagePath=new URL(target.imagePath,location.href).href;ready();});
     const sizeRow=document.createElement('p');
     sizeRow.innerHTML='印刷したカラー枠の外幅 <input id="color-width" type="number" inputmode="decimal" min="5" max="60" value="18" step="0.1" style="width:4em"> cm · <a href="paper/print.html" target="_blank" rel="noopener">印刷用紙</a>';
     document.getElementById('diagnostics').before(sizeRow);
     const sizeInput=document.getElementById('color-width');
-    document.querySelector('.eyebrow').textContent='Roll-by-Blow · 0.3.4 · カラー枠';
+    document.querySelector('.eyebrow').textContent='Roll-by-Blow · '+webRevision+' · '+(imageOnly?'用紙だけの比較':'カラー枠');
     ui.dimensions.textContent='カラー用紙を認識して自動配置します';
-    ui.guidance.textContent='最初はカラー枠の全体を映してください。認識後は一部が外れても周囲の追跡を続けます。';
+    ui.guidance.textContent=imageOnly?'比較用です。枠の全体を映し続けてください。用紙の認識を失うと止まります。':'最初はカラー枠の全体を映してください。認識後は一部が外れても周囲の追跡を続けます。';
     ui.place.hidden=true;ui.coaching.hidden=true;ui.reticle.hidden=true;
     ui.replace.textContent='用紙を読み直す';ui.recenter.textContent='認識し直す';
-    function record(kind,detail){events.push({time:new Date().toISOString(),kind,detail});if(events.length>120)events.shift();}
+    function record(kind,detail){
+      const event={time:new Date().toISOString(),kind,detail};
+      events.push(event);if(events.length>240)events.shift();
+      if(['engine-ready','unity-ready','unity-registered','camera-start','error','tracking-settings'].includes(kind)){
+        lifecycle.push(event);if(lifecycle.length>30)lifecycle.shift();
+      }
+    }
+    const copyPosition=p=>p?{x:p.x,y:p.y,z:p.z}:null;
+    const copyRotation=q=>q?{x:q.x,y:q.y,z:q.z,w:q.w}:null;
+    function samplePose(clock,camera,pose,imageFresh){
+      if(clock<nextPoseSample)return;nextPoseSample=clock+500;
+      poseHistory.push({elapsedMs:Math.round(clock-startedAt),frame:frame[0],source:tracking.source,
+        rawStatus:tracking.rawStatus,anchorName:anchor?anchor.name:null,imageFresh,
+        imageAgeMs:anchor?Math.round(clock-lastAnchorAt):null,
+        cameraInBoard:pose?copyPosition(pose.position):null,rotationInBoard:pose?copyRotation(pose.rotation):null,
+        metersPerWorldUnit:pose?pose.metersPerWorldUnit:null,
+        camera:camera?{position:copyPosition(camera.position),rotation:copyRotation(camera.rotation)}:null,
+        image:anchor?{position:copyPosition(anchor.position),rotation:copyRotation(anchor.rotation),scale:anchor.scale,scaledWidth:anchor.scaledWidth}:null});
+      if(poseHistory.length>240)poseHistory.shift();
+    }
     function send(method,value){if(unity)unity.SendMessage('FloorProbe',method,value===undefined?'':value);}
     function ready(){
       if(unity&&config&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
-        state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent='カラー枠で開始';
+        state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'用紙だけで比較を開始':'カラー枠で開始';
         ui.loading.hidden=true;ui.status.textContent='準備できました。';ui.phase.textContent='開始前';
       }
     }
@@ -71,7 +93,8 @@
       const d=event.detail;
       if(!d||!layout)return;
       const spec=layout.targets.find(t=>t.name===d.name);if(!spec)return;
-      const candidate={...spec,position:d.position,rotation:d.rotation,scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight,updatedAt:performance.now()};
+      // Store a snapshot: SDK event objects must not mutate the retained world reference.
+      const candidate={...spec,position:copyPosition(d.position),rotation:copyRotation(d.rotation),scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight,updatedAt:performance.now()};
       const sample=rawCamera||{position:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0,w:1}};
       if(!RollColorPose.cameraInBoard(sample,candidate,Number(sizeInput.value)/100)){
         record('image-pose-rejected',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth});return;
@@ -79,7 +102,7 @@
       const wasVisible=visibleTargets.has(d.name);visibleTargets.add(d.name);targetAnchors.set(d.name,candidate);
       if(!anchor||anchor.name===d.name||!visibleTargets.has(anchor.name)||performance.now()-lastAnchorAt>200){anchor=candidate;lastAnchorAt=candidate.updatedAt;}
       imageVisible=visibleTargets.has(anchor.name);tracking.imageUpdates++;
-      if(!wasVisible)record('image-found',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight});
+      if(!wasVisible){tracking.imageFound++;record('image-found',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight});}
     }
     function update(result){
       if(!running)return;
@@ -93,7 +116,7 @@
       const clock=performance.now();
       const normal=valid&&camera.trackingStatus==='NORMAL'&&camera.trackingReason!=='INITIALIZING';
       const imageFresh=imageVisible&&clock-lastAnchorAt<250;
-      const usable=!!pose&&(normal||imageFresh);
+      const usable=!!pose&&(imageFresh||(!imageOnly&&normal));
       frame[0]++;frame[1]=1;frame[2]=usable?1:0;frame[35]=usable?1:0;
       if(usable){
         lastPoseAt=clock;tracking.cameraInBoard=pose.position;tracking.metersPerWorldUnit=pose.metersPerWorldUnit;
@@ -101,17 +124,19 @@
         frame[6]=pose.rotation.x;frame[7]=pose.rotation.y;frame[8]=pose.rotation.z;frame[9]=pose.rotation.w;
         frame.set(camera.intrinsics,10);frame[36]=canvas.width;frame[37]=canvas.height;
         frame[38]=screen.orientation&&finite(screen.orientation.angle)?screen.orientation.angle:(window.orientation||0);
-        tracking.source=imageFresh?'image-and-world':'world-continuation';
+        tracking.source=imageFresh?(imageOnly?'image-direct':'image-and-world'):'world-continuation';
         if(imageFresh)tracking.imageFrames++;else tracking.worldFrames++;
         if(!placed&&clock-placementAt>500){placementAt=clock;send('PlaceFromMarker',JSON.stringify({position:{x:0,y:0,z:0},sizeMeters:Number(sizeInput.value)/100}));}
       }else{tracking.source=anchor?'tracking-unavailable':'waiting-for-image';tracking.limitedFrames++;}
-      if(tracking.source!==lastMode){lastMode=tracking.source;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
+      if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
+      samplePose(clock,valid?camera:null,pose,imageFresh);
       ui.phase.textContent=usable?'プレイ中':'認識中';
       ui.status.textContent=usable?'カラー用紙を基準に追跡しています。':anchor?'周囲と用紙の追跡を待っています。':'カラー枠の全体を映してください。';
     }
     function addModules(){
-      XR8.XrController.configure({disableWorldTracking:false,enableLighting:false,enableWorldPoints:false,
+      XR8.XrController.configure({disableWorldTracking:imageOnly,enableLighting:false,enableWorldPoints:false,
         leftHandedAxes:false,mirroredDisplay:false,scale:'responsive',imageTargetData:targets});
+      record('tracking-settings',{webRevision,imageOnly,targetNames:targets.map(t=>t.name),targetCount:targets.length,arTargetFps:30});
       if(added)return;
       XR8.addCameraPipelineModules([XR8.GlTextureRenderer.pipelineModule(),XR8.XrController.pipelineModule(),{
         name:'roll-color-image-world',
@@ -122,7 +147,7 @@
             if(anchor&&anchor.name===event.detail.name){
               for(const name of visibleTargets){const other=targetAnchors.get(name);if(other){anchor=other;lastAnchorAt=other.updatedAt;break;}}
             }
-            imageVisible=!!anchor&&visibleTargets.has(anchor.name);record('image-lost',{name:event.detail.name,continueWithWorld:true});
+            imageVisible=!!anchor&&visibleTargets.has(anchor.name);tracking.imageLost++;record('image-lost',{name:event.detail.name,continueWithWorld:!imageOnly});
           }},
           {event:'reality.imagescanning',process:event=>record('image-scanning',event.detail)}
         ],
@@ -146,10 +171,13 @@
         if(!isSecureContext||!navigator.mediaDevices)throw Error('HTTPSのSafariで開いてください。');
         const width=Number(sizeInput.value)/100;if(!finite(width)||width<.05||width>.6)throw Error('カラー枠の実測した外幅を5〜60cmで入力してください。');
         // Request motion only for the SDK's own world tracking; never overwrite its camera rotation.
-        const permissions=[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
+        const permissions=imageOnly?[]:[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
         const results=await Promise.all(permissions);if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
         await readyData;if(token!==session||document.hidden){starting=false;return;}
         anchor=null;imageVisible=false;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
+        startedAt=performance.now();nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
+        Object.assign(tracking,{source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
+          rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0});
         canvas.width=Math.max(1,innerWidth);canvas.height=Math.max(1,innerHeight);sizeInput.disabled=true;
         addModules();state.phase='starting';
         ui.start.hidden=true;ui.stop.disabled=ui.replace.disabled=ui.recenter.disabled=false;
@@ -164,10 +192,10 @@
       record('clear-image-anchor',null);
     });
     ui.download.addEventListener('click',()=>{
-      const data={prototype:'ARRollCapture-0.3.4-color',savedAt:new Date().toISOString(),page:location.href,userAgent:navigator.userAgent,
+      const data={prototype:'ARRollCapture-'+webRevision+'-color',webRevision,imageOnly,savedAt:new Date().toISOString(),page:location.href,userAgent:navigator.userAgent,
         phase:state.phase,error,config,layout,tracking:{...tracking,imageVisible,lastImageAgeMs:anchor?performance.now()-lastAnchorAt:null},
         anchor,rawCamera:rawCamera?{position:rawCamera.position,rotation:rawCamera.rotation}:null,frame:Array.from(frame),unity:unityReport,
-        game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,events};
+        game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
       const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='roll-by-blow-color-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
     });
@@ -281,10 +309,10 @@
       pixelRatio:1,captureContext:(kind,gl)=>{if(gl&&/webgl/.test(kind))installUnityAlphaGuard(gl);},
       progress:value=>{ui.progress.style.width=Math.round(value*100)+'%';},
       banner:(message,type)=>{record('unity-'+type,String(message));if(type==='error')fail('Unity読み込みエラーです。',message);},fail,
-      setUnity:instance=>{unity=instance;ready();},
-      register:value=>{config=value;if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){fail('前回分も含む0.3.4ソースから再ビルドし、Buildを一式公開してください。');return;}ready();},
+      setUnity:instance=>{unity=instance;record('unity-ready',true);ready();},
+      register:value=>{config=value;record('unity-registered',{playerRevision:value.playerRevision,frameFloatCount:value.frameFloatCount});if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){fail('Unity本体は0.3.4のビルドが必要です。Web接続0.3.5だけでは旧Unityを更新できません。');return;}ready();},
       readFrame:()=>{if(!running||performance.now()-lastPoseAt>350){frame[2]=frame[35]=0;}return config&&config.frameFloatCount===39?frame:legacyFrame;},
-      report:value=>{unityReport=value;placed=!!value.placed;ui.metrics.textContent=JSON.stringify({provider:'image-and-world',tracking,placed,fps:value.fps},null,2);},
+      report:value=>{unityReport=value;placed=!!value.placed;ui.metrics.textContent=JSON.stringify({webRevision,provider:imageOnly?'image-direct':'image-and-world',tracking,placed,fps:value.fps},null,2);},
       gameCommand:method=>{if(method==='ResetBall')send(method);},
       gameIsActive:()=>running&&placed&&frame[2]>.5&&performance.now()-lastPoseAt<350
     };
