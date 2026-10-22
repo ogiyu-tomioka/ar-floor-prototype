@@ -1,0 +1,72 @@
+{
+  "revision": "0.3.4",
+  "generatedOn": "2026-10-22",
+  "artwork": "Project-created colour frame and non-repeating grain. No printed game geometry or spawns.",
+  "paperWidthMeters": 0.18,
+  "activeTargets": [
+    {
+      "name": "color-board-left",
+      "data": "paper/image-targets/color-board-left.json",
+      "widthRatio": 0.7501224889759922,
+      "offsetXRatio": -0.1249387555120039,
+      "offsetZRatio": 0,
+      "imagePath": "paper/image-targets/color-board-left_luminance.png",
+      "pixels": [
+        480,
+        640
+      ],
+      "sha256": "a4c6f4b44f177b83f09402ed443effe1c658032f35579a7b58043dbeb1193ca5"
+    },
+    {
+      "name": "color-board-right",
+      "data": "paper/image-targets/color-board-right.json",
+      "widthRatio": 0.7501224889759922,
+      "offsetXRatio": 0.12493875551200395,
+      "offsetZRatio": 0,
+      "imagePath": "paper/image-targets/color-board-right_luminance.png",
+      "pixels": [
+        480,
+        640
+      ],
+      "sha256": "ca0d7c1317555b216aa90a97f0b4260d964bb3bad1e1e2d1966b2f5e7621af23"
+    }
+  ],
+  "tool": "Official image-target-cli applyCrop; Sharp import adapted to the bundled runtime only.",
+  "toolReadme": "https://github.com/8thwall/8thwall/blob/main/apps/image-target-cli/README.md",
+  "toolSources": {
+    "apply.js": {
+      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/apply.js",
+      "sha256": "5c5f5cd615c805edecba3c8921eecd0db4a8c555226dd278d11586969dd6458e"
+    },
+    "crop.js": {
+      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/crop.js",
+      "sha256": "319138a46cc780b75d2a0797e79cf3eedad2b8b70ffcad7042a7e23fc9d04e03"
+    },
+    "image-data.js": {
+      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/image-data.js",
+      "sha256": "777c62d45f83dee1e5c8a030a671f46debbab3f91b8d3238312068174a34e64a"
+    },
+    "curved-geometry.js": {
+      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/curved-geometry.js",
+      "sha256": "ae8493e49a6277df9a69f85be685ba5c1459739b68d0bbdd6168801a9a242200"
+    },
+    "unconify.js": {
+      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/unconify.js",
+      "sha256": "6ed23294ec791030d78d5aaf28d9a9183df65f84a3b3e7e77eda74c7d0c1998e"
+    },
+    "constants.json": {
+      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/constants.json",
+      "sha256": "74d74ee594de4179326f8266d7c13fafa9fd760d96b42f214027f0b43bd1ce12"
+    }
+  },
+  "toolLicense": "image-targets/IMAGE-TARGET-CLI-LICENSE.txt",
+  "sourceArtworkSha256": {
+    "stage-color-A4.pdf": "b4595b3b3f16f0f36fb97acba206120d4174995971b73f0e047dc4df6c9aaecf",
+    "stage-color-A4-300dpi.png": "a412a40fe879d93d57218306bde735f83b173a0feedfea6bc71b0e4843c908a2",
+    "stage-color.svg": "6ee98a9e06272efedcb1b9ec39e270db2b330d7d14859a0c2ef1063dbf2c8838",
+    "board-target.png": "e3afa5226369378c8eaf679c8fdae1fbcc4de9e9a52bd761bae3def46b034554"
+  },
+  "runtime": "Existing bundled XR Engine; no engine binary changes; no remote target compilation service.",
+  "arRuntimeExecuted": false,
+  "deviceDetectionMeasured": false
+}

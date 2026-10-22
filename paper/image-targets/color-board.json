@@ -1,0 +1,27 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 0,
+    "width": 2041,
+    "height": 2041,
+    "isRotated": false,
+    "originalWidth": 2041,
+    "originalHeight": 2041
+  },
+  "imagePath": "paper/image-targets/color-board_luminance.png",
+  "metadata": {
+    "physicalWidthMeters": 0.18,
+    "physicalHeightMeters": 0.18,
+    "layoutRevision": "color-frame-0.3.4"
+  },
+  "name": "color-board",
+  "resources": {
+    "originalImage": "color-board_original.png",
+    "croppedImage": "color-board_cropped.png",
+    "thumbnailImage": "color-board_thumbnail.png",
+    "luminanceImage": "color-board_luminance.png"
+  },
+  "created": 1792659938967,
+  "updated": 1792659938967
+}

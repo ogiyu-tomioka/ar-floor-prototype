@@ -1,0 +1,45 @@
+{
+  "revision": "color-frame-0.3.4",
+  "sourcePrefabSha256": "319f3b071b2cf09761237d5a0144f1202390a5725cf7a56a681efd48c985466e",
+  "paper": {
+    "widthMm": 297,
+    "heightMm": 210,
+    "orientation": "landscape"
+  },
+  "target": {
+    "kind": "natural-image",
+    "name": "color-board",
+    "physicalWidthMeters": 0.18,
+    "physicalHeightMeters": 0.18,
+    "centerMm": [
+      148.5,
+      105
+    ],
+    "sourceImage": "paper/board-target.png"
+  },
+  "stage": {
+    "centerMm": [
+      148.5,
+      105
+    ],
+    "outerWidthMeters": 0.18,
+    "outerUnits": 22,
+    "openingUnits": 20
+  },
+  "targets": [
+    {
+      "name": "color-board-left",
+      "data": "paper/image-targets/color-board-left.json",
+      "widthRatio": 0.7501224889759922,
+      "offsetXRatio": -0.1249387555120039,
+      "offsetZRatio": 0
+    },
+    {
+      "name": "color-board-right",
+      "data": "paper/image-targets/color-board-right.json",
+      "widthRatio": 0.7501224889759922,
+      "offsetXRatio": 0.12493875551200395,
+      "offsetZRatio": 0
+    }
+  ]
+}

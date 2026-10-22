@@ -1,0 +1,30 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 0,
+    "width": 1531,
+    "height": 2041,
+    "isRotated": false,
+    "originalWidth": 1531,
+    "originalHeight": 2041
+  },
+  "imagePath": "paper/image-targets/color-board-right_luminance.png",
+  "metadata": {
+    "name": "color-board-right",
+    "data": "paper/image-targets/color-board-right.json",
+    "widthRatio": 0.7501224889759922,
+    "offsetXRatio": 0.12493875551200395,
+    "offsetZRatio": 0,
+    "layoutRevision": "color-frame-0.3.4"
+  },
+  "name": "color-board-right",
+  "resources": {
+    "originalImage": "color-board-right_original.png",
+    "croppedImage": "color-board-right_cropped.png",
+    "thumbnailImage": "color-board-right_thumbnail.png",
+    "luminanceImage": "color-board-right_luminance.png"
+  },
+  "created": 1792660681937,
+  "updated": 1792660681937
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "file": "ar-threex.mjs",
+    "bytes": 1618782,
+    "sha256": "6c9aa037be052f9741defe725bc3d22b01c8ba09500a41796a11f6417eb6fd34"
+  },
+  {
+    "file": "ARJS-LICENSE.txt",
+    "bytes": 1062,
+    "sha256": "a1f95e66eddf8634d15c6a743e292a88dd56eca8cc23c33f923c01b0af5c752f"
+  },
+  {
+    "file": "ARTOOLKIT-LICENSE.txt",
+    "bytes": 46081,
+    "sha256": "a59f57ae5f7bd7e46815c935a90d7e2f2606fa69d9123c98ba3eed409d7e2a3f"
+  },
+  {
+    "file": "camera_para.dat",
+    "bytes": 176,
+    "sha256": "dc0487240de94aafab0f6106c6d9faf79b70f22de0faf3281d341e33edd777ed"
+  },
+  {
+    "file": "patt.hiro",
+    "bytes": 12484,
+    "sha256": "749618e935cd1ddc715acc77da1bcd7687a6d5dbc64e1f943a1e10fd6596e516"
+  },
+  {
+    "file": "THREE-LICENSE.txt",
+    "bytes": 1081,
+    "sha256": "4c40a1ef62450b857c3b2aaf294936304cd552d965fbcd9d32d4c5bcf4ba4454"
+  },
+  {
+    "file": "three.module.js",
+    "bytes": 1274691,
+    "sha256": "a97ec6852978949b7941c070b81292b842473a37549222353fa0a70c18d7285a"
+  }
+]
