@@ -1,7 +1,11 @@
 /* MIT License. Project code only; the XR Engine has its separate bundled license. */
 (function () {
   'use strict';
-  const revision = '0.3.2';
+  if (new URLSearchParams(location.search).get('tracking') !== 'world') {
+    window.FloorProbeBridge = window.RollColorBridge();
+    return;
+  }
+  const revision = '0.3.4';
   const cameraOrientation = window.RollCameraOrientation ? RollCameraOrientation() : null;
   const sdkRotationOnly = new URLSearchParams(location.search).get('rotation') === 'sdk';
   const budgetArLoop = new URLSearchParams(location.search).get('xrloop') !== 'engine';
