@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.12',maximumImageGapMs=2000;
+    const webRevision='0.3.13',maximumImageGapMs=2000;
     const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');

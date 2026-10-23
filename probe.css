@@ -174,4 +174,10 @@ body.roll-tools-open #roll-monster-markers { display: none; }
 @media (max-width: 350px) { .roll-toolbar { width: 132px; } #roll-blow { width: 146px; } }
 body.roll-tools-open .roll-blower { display: none; }
 
-#roll-permission-title, .permission-help { text-align: center; }
+/* Start-screen alignment is separate from the centered in-game guidance. */
+.permission-card, #roll-permission-title, .permission-help { text-align: left; }
+.permission-card #start { text-align: center; }
+.permission-version { display: block; margin-top: 12px; font-size: 11px; line-height: 1.4; color: #b2cec1; }
+
+/* Keep the lower edge free for controls; center the blower only while held. */
+.is-blowing .roll-blower { left: 50%; right: auto; transform: translateX(-50%); }

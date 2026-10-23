@@ -79,16 +79,19 @@
     const far = unit(value.windAimFarFalloff) * horizontal;
     const direction = value.windAimGradient;
     const directional = direction && Number.isFinite(direction.x) && Number.isFinite(direction.y)
-      && Math.hypot(direction.x, direction.y) > .00001 && near - far > .001;
+      && Math.hypot(direction.x, direction.y) > .00001 && near > far;
     let fill;
     if (force < .01) {
       fill = 'rgba(168, 222, 225, 0.10)';
     } else if (directional) {
       const angle = Math.atan2(direction.x * window.innerWidth, direction.y * window.innerHeight) * 180 / Math.PI;
-      const nearAlpha = (.26 + .42 * Math.sqrt(near)).toFixed(3);
-      const farAlpha = (.08 + .14 * Math.sqrt(far)).toFixed(3);
-      fill = 'linear-gradient(' + angle.toFixed(1) + 'deg, rgba(255, 135, 35, ' + nearAlpha
-        + ') 0%, rgba(255, 239, 176, ' + farAlpha + ') 100%)';
+      // Amplify relative contrast for readability; this does not change physical wind force.
+      const nearAlpha = .30 + .46 * Math.sqrt(near);
+      const farAlpha = .10 + .16 * Math.sqrt(far);
+      const middleAlpha = (nearAlpha + farAlpha) * .5;
+      fill = 'linear-gradient(' + angle.toFixed(1) + 'deg, rgba(244, 105, 24, ' + nearAlpha.toFixed(3)
+        + ') 0%, rgba(255, 182, 65, ' + middleAlpha.toFixed(3)
+        + ') 50%, rgba(255, 244, 205, ' + farAlpha.toFixed(3) + ') 100%)';
     } else {
       fill = 'rgba(255, 190, 80, ' + (.16 + .32 * Math.sqrt(force)).toFixed(3) + ')';
     }
@@ -169,10 +172,10 @@
     snapshot: function () { return {report: latest, blowing: blowing, paused: paused()}; },
     readControls: function () { if (paused()) { reset(); hideMonsterMarkers(); return [0,0,1]; } return [blowing?1:0,0,0]; },
     report: function (value) {
-      if (value.gameplayRevision !== '0.3.12') {
+      if (value.gameplayRevision !== '0.3.13') {
         reset();
         if (window.RollStartup) RollStartup.fail('ゲーム本体と画面の版が一致しません。同じビルド一式を公開してください。',
-          'Expected gameplay 0.3.12; received ' + String(value.gameplayRevision), 'boot', true);
+          'Expected gameplay 0.3.13; received ' + String(value.gameplayRevision), 'boot', true);
         return;
       }
       if (value.message === 'recovered' && (!latest || latest.message !== 'recovered')) reset();
@@ -206,7 +209,7 @@
       if (versionNote) {
         let arVersion = '—';
         try { arVersion = JSON.parse(document.getElementById('metrics').textContent).webRevision || '従来モード'; } catch (_) {}
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.12';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.13';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
