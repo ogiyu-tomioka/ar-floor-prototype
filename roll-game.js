@@ -6,10 +6,10 @@
     <div class="roll-telemetry">
       <div class="roll-power-label"><span>球を押す力</span><span id="roll-power-value">—</span></div>
       <meter id="roll-power-meter" min="0" max="1" value="0" aria-label="照準位置で球を横へ押す力"></meter>
-      <small id="roll-wind-legend">丸は風の広がり・矢印は押す向き</small>
+      <small id="roll-wind-legend">濃い側ほど強い風・矢印は押す向き</small>
     </div>
+    <button id="roll-reset" aria-label="球と未捕獲モンスターを初期位置に戻す">復帰</button>
     <nav class="roll-toolbar" aria-label="ゲーム操作">
-      <button id="roll-reset" aria-label="球と未捕獲モンスターを初期位置に戻す">復帰</button>
       <button id="roll-collection">図鑑</button><button id="roll-tools">AR操作</button>
     </nav>
     <div class="roll-aim" aria-hidden="true"><span class="roll-aim-dot"></span></div>
@@ -75,7 +75,32 @@
     const size = Number.isFinite(radius) ? Math.max(0, radius) * 2 * window.innerHeight : 0;
     panel.style.setProperty('--wind-diameter', size.toFixed(2) + 'px');
   }
-  window.addEventListener('resize', function () { sizeWindGuide(latest && latest.windAimScreenRadius); });
+  function shadeWindGuide(value, force) {
+    const unit = n => Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+    const horizontal = unit(value.windHorizontalStrength);
+    const near = unit(value.windAimNearFalloff) * horizontal;
+    const far = unit(value.windAimFarFalloff) * horizontal;
+    const direction = value.windAimGradient;
+    const directional = direction && Number.isFinite(direction.x) && Number.isFinite(direction.y)
+      && Math.hypot(direction.x, direction.y) > .00001 && near - far > .001;
+    let fill;
+    if (force < .01) {
+      fill = 'rgba(168, 222, 225, 0.07)';
+    } else if (directional) {
+      const angle = Math.atan2(direction.x * window.innerWidth, direction.y * window.innerHeight) * 180 / Math.PI;
+      const nearAlpha = (.18 + .34 * Math.sqrt(near)).toFixed(3);
+      const farAlpha = (.04 + .10 * Math.sqrt(far)).toFixed(3);
+      fill = 'linear-gradient(' + angle.toFixed(1) + 'deg, rgba(255, 135, 35, ' + nearAlpha
+        + ') 0%, rgba(255, 239, 176, ' + farAlpha + ') 100%)';
+    } else {
+      fill = 'rgba(255, 190, 80, ' + (.08 + .22 * Math.sqrt(force)).toFixed(3) + ')';
+    }
+    aim.style.setProperty('--wind-fill', fill);
+  }
+  window.addEventListener('resize', function () {
+    sizeWindGuide(latest && latest.windAimScreenRadius);
+    if (latest) shadeWindGuide(latest, Math.max(0, Math.min(1, Number(latest.windAimStrength) || 0)));
+  });
   function reset() {
     pointer = null; blowing = false; panel.classList.remove('is-blowing');
     button.setAttribute('aria-pressed','false'); button.textContent = '押して風を出す';
@@ -117,10 +142,10 @@
     snapshot: function () { return {report: latest, blowing: blowing, paused: paused()}; },
     readControls: function () { if (paused()) { reset(); return [0,0,1]; } return [blowing?1:0,0,0]; },
     report: function (value) {
-      if (value.gameplayRevision !== '0.3.10') {
+      if (value.gameplayRevision !== '0.3.11') {
         reset();
         if (window.RollStartup) RollStartup.fail('ゲーム本体と画面の版が一致しません。同じビルド一式を公開してください。',
-          'Expected gameplay 0.3.10; received ' + String(value.gameplayRevision), 'boot', true);
+          'Expected gameplay 0.3.11; received ' + String(value.gameplayRevision), 'boot', true);
         return;
       }
       if (value.message === 'recovered' && (!latest || latest.message !== 'recovered')) reset();
@@ -149,13 +174,14 @@
       sizeWindGuide(radius);
       aim.hidden = radius <= 0;
       const force = hasAim && Number.isFinite(value.windAimStrength) ? Math.max(0, Math.min(1, value.windAimStrength)) : 0;
+      shadeWindGuide(value, force);
       powerMeter.value = force;
       powerValue.textContent = hasAim ? Math.round(force * 100) + '%' : '—';
-      windLegend.textContent = hasAim ? '丸は風の広がり・矢印は押す向き' : '背面カメラを床へ向けよう';
+      windLegend.textContent = hasAim ? '濃い側ほど強い風・矢印は押す向き' : '背面カメラを床へ向けよう';
       if (versionNote) {
         let arVersion = '—';
         try { arVersion = JSON.parse(document.getElementById('metrics').textContent).webRevision || '従来モード'; } catch (_) {}
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.10';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.11';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const nextNotice = !value.tracking ? (window.FloorProbeBridge && FloorProbeBridge.trackingHint ? FloorProbeBridge.trackingHint() : '追跡を待っています')

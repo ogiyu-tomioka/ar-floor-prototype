@@ -68,9 +68,9 @@ body.roll-playing .top h1 { font-size: 18px; }
 body.roll-playing .top .loading { display: none; }
 #roll-controls { inset: 0; }
 #roll-notice { position: absolute; top: calc(70px + env(safe-area-inset-top)); left: 14px; right: 14px; width: auto; max-width: 520px; margin: 0 auto; padding: 8px 10px; font-size: 12px; line-height: 1.45; background: #102923eb; }
-.roll-toolbar { position: absolute; left: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(198px, calc(100vw - 186px)); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.roll-toolbar { position: absolute; left: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(198px, calc(100vw - 186px)); display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 8px; }
 .roll-toolbar button { min-height: 48px; padding: 6px 2px; font-size: 12px; background: #102923f2; pointer-events: auto; }
-.roll-telemetry { position: absolute; left: 14px; bottom: calc(82px + env(safe-area-inset-bottom)); width: min(198px, calc(100vw - 186px)); padding: 8px 9px; border-radius: 10px; background: #102923eb; }
+.roll-telemetry { position: absolute; left: 14px; bottom: calc(138px + env(safe-area-inset-bottom)); width: min(198px, calc(100vw - 186px)); padding: 8px 9px; border-radius: 10px; background: #102923eb; }
 .roll-power-label { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; }
 #roll-power-meter { display: block; width: 100%; height: 10px; margin: 5px 0; accent-color: #efcb79; }
 #roll-power-meter::-webkit-meter-bar { background: #ffffff20; border: 0; border-radius: 5px; }
@@ -143,3 +143,11 @@ body.roll-tools-open #roll-catch-toast { display: none; }
 .permission-card #start { min-height: 56px; font-size: 17px; }
 @media (max-height: 600px) { #roll-notice { font-size: 16px; padding: 9px 11px; } .permission-card { padding: 19px; } .permission-card h2 { font-size: 23px; margin-bottom: 16px; } }
 @media (prefers-reduced-motion: reduce) { #roll-catch-toast { animation: none; } }
+
+/* Full-width title block and separated lower actions. */
+.panel.top, body.roll-playing .panel.top { top: 0; left: 0; right: 0; max-width: none; margin: 0; padding: calc(12px + env(safe-area-inset-top)) 14px 12px; border: 0; border-radius: 0; background: #102923; box-shadow: none; }
+#roll-notice { top: calc(64px + env(safe-area-inset-top)); }
+#roll-reset { position: absolute; left: 14px; bottom: calc(80px + env(safe-area-inset-bottom)); width: 92px; height: 44px; min-height: 44px; padding: 6px 8px; font-size: 12px; color: #d6e8df; background: #152e29ed; border: 1px solid #9ab7aa77; pointer-events: auto; }
+.roll-toolbar #roll-collection { background: #2c5361; border-color: #8bbbc18a; color: #e3fbff; font-weight: 700; }
+.roll-aim, .is-blowing .roll-aim { background: var(--wind-fill, rgba(168, 222, 225, .07)); opacity: .65; }
+.is-blowing .roll-aim { opacity: 1; }
