@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.11',maximumImageGapMs=2000;
+    const webRevision='0.3.12',maximumImageGapMs=2000;
     const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
@@ -73,7 +73,7 @@
     ui.dimensions.textContent='新しい用紙0.3.6を認識して自動配置します';
     ui.guidance.textContent=imageOnly?'新しい用紙の枠全体を映してください。比較用のため用紙の認識を失うと止まります。':'新しい用紙の枠全体を映してください。見失った後は最大2秒補い、戻らなければ一時停止します。';
     ui.place.hidden=true;ui.coaching.hidden=true;ui.reticle.hidden=true;
-    ui.replace.textContent='用紙を読み直す';ui.recenter.textContent='認識し直す';
+    ui.replace.textContent='用紙を読み直す';ui.recenter.hidden=true;
     function record(kind,detail){
       const event={time:new Date().toISOString(),kind,detail};
       events.push(event);if(events.length>240)events.shift();
@@ -182,8 +182,7 @@
       if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
       samplePose(clock,valid?camera:null,pose,imageFresh);
       ui.phase.textContent=usable?'プレイ中':anchor?'一時停止':'認識中';
-      ui.status.textContent=usable?(imageVisible?'カラー用紙を基準に追跡しています。':'用紙を再認識しています。最大2秒まで表示を補います。'):
-        anchor?'用紙を見失いました。枠全体を映すと自動で再開します。':'新しい用紙0.3.6のカラー枠全体を映してください。';
+      ui.status.textContent=usable&&imageVisible?'カラー用紙を基準に追跡しています。':'用紙の枠全体を映してください';
       if(!anchor&&clock-recognitionWaitAt>25000){recognitionWaitAt=Infinity;deferFailure('用紙を認識できませんでした。枠全体と明るさを確認して、もう一度開始してください。');}
     }
     function addModules(){
@@ -388,7 +387,8 @@
       },
       gameCommand:method=>{if(method==='RequestReset'||method==='ResetBall')send('RequestReset');},
       gameIsActive:()=>running&&placed&&frame[2]>.5&&performance.now()-lastPoseAt<350,
-      trackingHint:()=>anchor?'用紙を見失いました。枠全体を映すと再開します。':'新しい用紙0.3.6の枠全体を映してください。'
+      paperNeedsView:()=>running&&!imageVisible,
+      trackingHint:()=> '用紙の枠全体を映してください'
     };
   };
 }());

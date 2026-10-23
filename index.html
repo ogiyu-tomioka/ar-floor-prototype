@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
   <title>Roll-by-Blow</title>
-  <link rel="stylesheet" href="probe.css?v=0.3.11">
+  <link rel="stylesheet" href="probe.css?v=0.3.12">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
@@ -32,7 +32,7 @@
     </div>
     <details id="diagnostics">
       <summary>確認用の詳細</summary>
-      <p id="roll-version" class="note">ゲーム読み込み待ち / AR接続 0.3.11 / 画面 0.3.11</p>
+      <p id="roll-version" class="note">ゲーム読み込み待ち / AR接続 0.3.12 / 画面 0.3.12</p>
       <pre id="metrics">準備中</pre>
       <p class="note">診断に写真・映像は含まれません。</p>
       <button id="download">診断を保存</button>
@@ -41,6 +41,7 @@
   </main>
   <section id="roll-permission-guide" aria-labelledby="roll-permission-title">
     <div class="permission-card">
+      <img class="permission-mascot" src="icons/monster-face.svg" alt="モンスターの顔" width="56" height="56">
       <span class="permission-kicker">プレイを始める前に</span>
       <h2 id="roll-permission-title">カメラとモーションを<br>許可してください</h2>
       <p class="permission-item"><strong>カメラ</strong><span>机と認識用紙を映すために使います。</span></p>
@@ -54,14 +55,14 @@
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
   <script type="importmap">{"imports":{"three":"./external/marker/three.module.js"}}</script>
-  <script src="startup-recovery.js?v=0.3.11"></script>
+  <script src="startup-recovery.js?v=0.3.12"></script>
   <script src="color-pose.js?v=0.3.6"></script>
-  <script src="color-provider.js?v=0.3.11"></script>
+  <script src="color-provider.js?v=0.3.12"></script>
   <script src="camera-orientation.js?v=0.3.4"></script>
   <script src="pose-guard.js?v=0.3.4"></script>
   <script src="table-placement.js?v=0.3.4"></script>
-  <script src="probe.js?v=0.3.11"></script>
-  <script src="roll-game.js?v=0.3.11"></script>
+  <script src="probe.js?v=0.3.12"></script>
+  <script src="roll-game.js?v=0.3.12"></script>
   <script>
     (function () {
       const unityCanvas = document.getElementById('unity-canvas');
@@ -82,7 +83,7 @@
         streamingAssetsUrl: 'StreamingAssets',
         companyName: "LocalPrototype",
         productName: "AR Roll Capture",
-        productVersion: "0.3.11",
+        productVersion: "0.3.12",
         devicePixelRatio: FloorProbeBridge.pixelRatio,
         webglContextAttributes: {alpha: true, premultipliedAlpha: true},
         showBanner: function (message, type) { FloorProbeBridge.banner(message, type); },

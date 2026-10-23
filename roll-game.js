@@ -2,16 +2,12 @@
   'use strict';
   const panel = document.createElement('section');
   panel.id = 'roll-controls'; panel.hidden = true;
-  panel.innerHTML = `<p id="roll-notice" role="status">背面カメラで球を狙い、斜めに吹こう</p>
-    <div class="roll-telemetry">
-      <div class="roll-power-label"><span>球を押す力</span><span id="roll-power-value">—</span></div>
-      <meter id="roll-power-meter" min="0" max="1" value="0" aria-label="照準位置で球を横へ押す力"></meter>
-      <small id="roll-wind-legend">濃い側ほど強い風・矢印は押す向き</small>
-    </div>
-    <button id="roll-reset" aria-label="球と未捕獲モンスターを初期位置に戻す">復帰</button>
+  panel.innerHTML = `<p id="roll-notice" role="status">端末の背面から風を出そう</p>
+    <button id="roll-reset" aria-label="球と未捕獲モンスターを初期位置に戻す"><span>復帰</span><small id="roll-reset-time" hidden></small></button>
     <nav class="roll-toolbar" aria-label="ゲーム操作">
       <button id="roll-collection">図鑑</button><button id="roll-tools">AR操作</button>
     </nav>
+    <div id="roll-monster-markers" aria-label="モンスターの状態"></div>
     <div class="roll-aim" aria-hidden="true"><span class="roll-aim-dot"></span></div>
     <svg class="roll-airflow" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
       <g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
@@ -40,7 +36,7 @@
       </svg>
       <span class="roll-camera-hint">背面から中央へ送風</span>
     </div>
-    <button id="roll-blow" aria-label="押している間だけ風を出す" aria-pressed="false">押して風を出す</button>`;
+    <button id="roll-blow" aria-label="押している間だけ風を出す" aria-pressed="false"><span class="roll-blow-hint">長押しで</span><strong>風を出す</strong></button>`;
   document.body.appendChild(panel);
   const dialog = document.createElement('dialog');
   dialog.id = 'roll-book';
@@ -50,9 +46,10 @@
   const button = document.getElementById('roll-blow');
   const note = document.getElementById('roll-notice');
   const resetButton = document.getElementById('roll-reset');
-  const powerMeter = document.getElementById('roll-power-meter');
-  const powerValue = document.getElementById('roll-power-value');
-  const windLegend = document.getElementById('roll-wind-legend');
+  const resetTime = document.getElementById('roll-reset-time');
+  const markerLayer = document.getElementById('roll-monster-markers');
+  const markerNodes = new Map();
+  let markerTick = 0;
   const aim = document.querySelector('.roll-aim');
   const catchToast = document.getElementById('roll-catch-toast');
   const versionNote = document.getElementById('roll-version');
@@ -85,15 +82,15 @@
       && Math.hypot(direction.x, direction.y) > .00001 && near - far > .001;
     let fill;
     if (force < .01) {
-      fill = 'rgba(168, 222, 225, 0.07)';
+      fill = 'rgba(168, 222, 225, 0.10)';
     } else if (directional) {
       const angle = Math.atan2(direction.x * window.innerWidth, direction.y * window.innerHeight) * 180 / Math.PI;
-      const nearAlpha = (.18 + .34 * Math.sqrt(near)).toFixed(3);
-      const farAlpha = (.04 + .10 * Math.sqrt(far)).toFixed(3);
+      const nearAlpha = (.26 + .42 * Math.sqrt(near)).toFixed(3);
+      const farAlpha = (.08 + .14 * Math.sqrt(far)).toFixed(3);
       fill = 'linear-gradient(' + angle.toFixed(1) + 'deg, rgba(255, 135, 35, ' + nearAlpha
         + ') 0%, rgba(255, 239, 176, ' + farAlpha + ') 100%)';
     } else {
-      fill = 'rgba(255, 190, 80, ' + (.08 + .22 * Math.sqrt(force)).toFixed(3) + ')';
+      fill = 'rgba(255, 190, 80, ' + (.16 + .32 * Math.sqrt(force)).toFixed(3) + ')';
     }
     aim.style.setProperty('--wind-fill', fill);
   }
@@ -103,7 +100,7 @@
   });
   function reset() {
     pointer = null; blowing = false; panel.classList.remove('is-blowing');
-    button.setAttribute('aria-pressed','false'); button.textContent = '押して風を出す';
+    button.setAttribute('aria-pressed','false');
   }
   function paused() {
     return tools || dialog.open || document.hidden || (window.RollStartup && RollStartup.pending()) || !latest || !latest.tracking
@@ -113,7 +110,7 @@
     if (paused() || pointer !== null) return;
     event.preventDefault(); pointer = event.pointerId; blowing = true; panel.classList.add('is-blowing');
     button.setPointerCapture(pointer);
-    button.setAttribute('aria-pressed','true'); button.textContent = '風を出しています';
+    button.setAttribute('aria-pressed','true');
   });
   ['pointerup','pointercancel','lostpointercapture'].forEach(function (name) {
     button.addEventListener(name, function (event) { if (event.pointerId === pointer) reset(); });
@@ -137,15 +134,45 @@
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
   });
+  function hideMonsterMarkers() { markerLayer.hidden = true; }
+  function updateMonsterMarkers(values, count) {
+    if (paused()) { hideMonsterMarkers(); return; }
+    markerLayer.hidden = false;
+    markerTick++;
+    const length = Math.min(Math.max(0, count | 0), Math.floor(values.length / 4));
+    for (let i = 0; i < length; i++) {
+      const offset = i * 4, id = values[offset], x = values[offset + 1], y = values[offset + 2], state = values[offset + 3];
+      if (!Number.isInteger(id) || id < 0 || !Number.isFinite(x) || !Number.isFinite(y)
+          || x < 0 || x > 1 || y < 0 || y > 1 || (state !== 1 && state !== 2)) continue;
+      let entry = markerNodes.get(id);
+      if (!entry) {
+        const element = document.createElement('span');
+        element.className = 'roll-monster-mark'; element.setAttribute('role', 'img');
+        element.innerHTML = '<svg viewBox="0 0 32 36" aria-hidden="true"><path d="M16 3L28 8V17C28 25 22 30 16 33C10 30 4 25 4 17V8Z" fill="none" stroke="currentColor" stroke-width="3"/></svg><b aria-hidden="true">!</b>';
+        markerLayer.appendChild(element); entry = {element, state:0, seen:0}; markerNodes.set(id, entry);
+      }
+      entry.seen = markerTick; entry.element.hidden = false;
+      if (entry.state !== state) {
+        entry.state = state; entry.element.setAttribute('data-state', String(state));
+        entry.element.setAttribute('aria-label', state === 2 ? '風が当たっています' : '防御中');
+      }
+      const left = x * window.innerWidth, top = (1 - y) * window.innerHeight - 7;
+      entry.element.style.transform = 'translate(' + left.toFixed(2) + 'px,' + top.toFixed(2) + 'px) translate(-50%,-100%)';
+    }
+    markerNodes.forEach(entry => { if (entry.seen !== markerTick) entry.element.hidden = true; });
+  }
+  document.addEventListener('visibilitychange', hideMonsterMarkers);
+  window.addEventListener('blur', hideMonsterMarkers);
   window.RollCaptureBridge = {
-    suspend: reset,
+    suspend: function () { reset(); hideMonsterMarkers(); },
+    markers: updateMonsterMarkers,
     snapshot: function () { return {report: latest, blowing: blowing, paused: paused()}; },
-    readControls: function () { if (paused()) { reset(); return [0,0,1]; } return [blowing?1:0,0,0]; },
+    readControls: function () { if (paused()) { reset(); hideMonsterMarkers(); return [0,0,1]; } return [blowing?1:0,0,0]; },
     report: function (value) {
-      if (value.gameplayRevision !== '0.3.11') {
+      if (value.gameplayRevision !== '0.3.12') {
         reset();
         if (window.RollStartup) RollStartup.fail('ゲーム本体と画面の版が一致しません。同じビルド一式を公開してください。',
-          'Expected gameplay 0.3.11; received ' + String(value.gameplayRevision), 'boot', true);
+          'Expected gameplay 0.3.12; received ' + String(value.gameplayRevision), 'boot', true);
         return;
       }
       if (value.message === 'recovered' && (!latest || latest.message !== 'recovered')) reset();
@@ -158,7 +185,7 @@
         document.getElementById('roll-tools').textContent = 'AR操作';
         if (dialog.open) dialog.close();
       }
-      if (!value.tracking) reset();
+      if (!value.tracking) { reset(); hideMonsterMarkers(); }
       if (value.placed && Number.isInteger(value.captureSequence) && value.captureSequence > 0
           && value.captureSequence !== lastCaptureSequence) {
         lastCaptureSequence = value.captureSequence; showCapture(value.lastCaughtName);
@@ -166,7 +193,8 @@
       button.disabled = paused();
       const resetSeconds = Math.max(0, Math.ceil(Number(value.resetCooldownRemaining) || 0));
       resetButton.disabled = paused() || resetSeconds > 0;
-      resetButton.textContent = resetSeconds ? '復帰 ' + resetSeconds + '秒' : '復帰';
+      resetTime.hidden = resetSeconds <= 0;
+      resetTime.textContent = resetSeconds ? resetSeconds + '秒' : ''; 
       resetButton.setAttribute('aria-label', resetSeconds ? '復帰はあと' + resetSeconds + '秒で使用できます' : '球と未捕獲モンスターを初期位置に戻す');
       const hasAim = !paused() && value.windAimVisible === true;
       panel.classList.toggle('has-wind-aim', hasAim);
@@ -175,16 +203,14 @@
       aim.hidden = radius <= 0;
       const force = hasAim && Number.isFinite(value.windAimStrength) ? Math.max(0, Math.min(1, value.windAimStrength)) : 0;
       shadeWindGuide(value, force);
-      powerMeter.value = force;
-      powerValue.textContent = hasAim ? Math.round(force * 100) + '%' : '—';
-      windLegend.textContent = hasAim ? '濃い側ほど強い風・矢印は押す向き' : '背面カメラを床へ向けよう';
       if (versionNote) {
         let arVersion = '—';
         try { arVersion = JSON.parse(document.getElementById('metrics').textContent).webRevision || '従来モード'; } catch (_) {}
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.11';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.12';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
-      const nextNotice = !value.tracking ? (window.FloorProbeBridge && FloorProbeBridge.trackingHint ? FloorProbeBridge.trackingHint() : '追跡を待っています')
+      const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
+      const nextNotice = !value.tracking || needsPaper ? '用紙の枠全体を映してください'
         : value.message === 'spawn-blocked' ? '出現場所を待っています。初期位置に戻せます'
         : value.message === 'caught' ? '捕獲成功！'
         : value.message === 'wind-guard' ? 'モンスターに直接風が当たった！ しばらく防御するよ'
@@ -192,7 +218,7 @@
         : value.message === 'guard' ? '防御された！ 青くないときを狙おう'
         : value.guarding ? '青いモンスターは防御中。風は球へ当てよう'
         : value.blowing && value.windHorizontalStrength < .01 ? '真下付近では横へ押せません。少し傾けてみよう'
-        : '背面カメラで球を狙い、斜めに吹こう';
+        : '端末の背面から風を出そう';
       if (note.textContent !== nextNotice) note.textContent = nextNotice;
       if (value.collectionJson !== lastCollectionJson) {
         try { collection = JSON.parse(value.collectionJson); } catch (_) { return; }
