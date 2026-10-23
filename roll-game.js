@@ -66,7 +66,7 @@
       }
       if (!value.tracking) reset();
       button.disabled = paused();
-      note.textContent = !value.tracking ? '追跡を待っています'
+      note.textContent = !value.tracking ? (window.FloorProbeBridge && FloorProbeBridge.trackingHint ? FloorProbeBridge.trackingHint() : '追跡を待っています')
         : value.message === 'spawn-blocked' ? '出現場所を待っています。初期位置に戻せます'
         : value.message === 'caught' ? '捕獲成功！'
         : value.message === 'wind-guard' ? 'モンスターに直接風が当たった！ しばらく防御するよ'

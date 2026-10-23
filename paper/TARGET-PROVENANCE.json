@@ -1,60 +1,47 @@
 {
-  "revision": "0.3.5",
-  "generatedOn": "2026-10-22",
-  "artwork": "Project-created colour frame and non-repeating grain. No printed game geometry or spawns.",
-  "paperWidthMeters": 0.18,
+  "revision": "0.3.6",
+  "artwork": "Project-created non-periodic high-contrast colour mosaic. No black square marker, game wall diagram or spawn symbols.",
+  "paperFrameWidthMeters": 0.18,
+  "physicalTargetRegion": {
+    "widthMeters": 0.21,
+    "heightMeters": 0.28,
+    "landscapeCropMm": [
+      8.5,
+      0,
+      280,
+      210
+    ],
+    "clockwiseDegrees": 90,
+    "centerMm": [
+      148.5,
+      105
+    ]
+  },
   "activeTargets": [
     {
-      "name": "color-board",
-      "data": "paper/image-targets/color-board.json",
-      "widthRatio": 1,
+      "name": "color-paper-036",
+      "data": "paper/image-targets/color-paper-036.json",
+      "widthRatio": 1.1666666666666667,
       "offsetXRatio": 0,
       "offsetZRatio": 0,
-      "imagePath": "paper/image-targets/color-board_luminance.png",
+      "imagePlaneRotationDegrees": 90,
       "pixels": [
-        640,
+        480,
         640
       ],
-      "sha256": "f46e8b2eca0b2d1fcd3b180aa98a0652d7ab17c84c8ed7aab10be30236a66493"
+      "imagePath": "paper/image-targets/color-paper-036_luminance.png",
+      "sha256": "7b797f3320e52f7d31135ca41b4f8738b4c9d95632df73d64f52f9374f2e9a58"
     }
   ],
-  "tool": "Official image-target-cli applyCrop; Sharp import adapted to the bundled runtime only.",
-  "toolReadme": "https://github.com/8thwall/8thwall/blob/main/apps/image-target-cli/README.md",
-  "toolSources": {
-    "apply.js": {
-      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/apply.js",
-      "sha256": "5c5f5cd615c805edecba3c8921eecd0db4a8c555226dd278d11586969dd6458e"
-    },
-    "crop.js": {
-      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/crop.js",
-      "sha256": "319138a46cc780b75d2a0797e79cf3eedad2b8b70ffcad7042a7e23fc9d04e03"
-    },
-    "image-data.js": {
-      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/image-data.js",
-      "sha256": "777c62d45f83dee1e5c8a030a671f46debbab3f91b8d3238312068174a34e64a"
-    },
-    "curved-geometry.js": {
-      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/curved-geometry.js",
-      "sha256": "ae8493e49a6277df9a69f85be685ba5c1459739b68d0bbdd6168801a9a242200"
-    },
-    "unconify.js": {
-      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/unconify.js",
-      "sha256": "6ed23294ec791030d78d5aaf28d9a9183df65f84a3b3e7e77eda74c7d0c1998e"
-    },
-    "constants.json": {
-      "url": "https://raw.githubusercontent.com/8thwall/8thwall/main/apps/image-target-cli/src/constants.json",
-      "sha256": "74d74ee594de4179326f8266d7c13fafa9fd760d96b42f214027f0b43bd1ce12"
-    }
-  },
-  "toolLicense": "image-targets/IMAGE-TARGET-CLI-LICENSE.txt",
+  "tool": "Official image-target-cli applyCrop (MIT); existing local Sharp import adaptation. No engine binary modified.",
+  "toolSource": "https://github.com/8thwall/8thwall/tree/main/apps/image-target-cli",
   "sourceArtworkSha256": {
-    "stage-color-A4.pdf": "b4595b3b3f16f0f36fb97acba206120d4174995971b73f0e047dc4df6c9aaecf",
-    "stage-color-A4-300dpi.png": "a412a40fe879d93d57218306bde735f83b173a0feedfea6bc71b0e4843c908a2",
-    "stage-color.svg": "6ee98a9e06272efedcb1b9ec39e270db2b330d7d14859a0c2ef1063dbf2c8838",
-    "board-target.png": "e3afa5226369378c8eaf679c8fdae1fbcc4de9e9a52bd761bae3def46b034554"
+    "stage-color-A4-0.3.6.pdf": "75eae4029a1dd4bba1de0f317c0c8b8b98a8c03e5bcd666b986a7845e8f44638",
+    "stage-color-A4-0.3.6-300dpi.png": "6080f2741e22c686d14eaccc40d8f7a27d0191995ec3b16a484bed77d887960f",
+    "stage-color-0.3.6.svg": "040f313844ea91138660e0393c39353325938d15fc53be42a8ac1669267d42b3",
+    "paper-target-0.3.6.png": "cf7b10607d3eede13d07f61df12637e8f9671cb7f0051ac30f0551c0396c6fcd"
   },
-  "runtime": "Existing bundled XR Engine; no engine binary changes; no remote target compilation service.",
+  "maximumImageGapMs": 2000,
   "arRuntimeExecuted": false,
-  "deviceDetectionMeasured": false,
-  "trackingNote": "One full-board square crop, accepted by the official CLI crop validation. Portrait dimensions are a best-results recommendation; actual detection still needs a device check."
+  "shadowRobustnessMeasured": false
 }

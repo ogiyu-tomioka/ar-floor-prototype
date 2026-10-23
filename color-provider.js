@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.5';
+    const webRevision='0.3.6',maximumImageGapMs=2000;
     const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
@@ -14,28 +14,39 @@
       viewport:null,manualDraws:0,manualError:''}};
     let unity,config,layout,targets=[],engineReady=!!window.XR8,added=false,error='',running=false,starting=false;
     const visibleTargets=new Set(),targetAnchors=new Map();
-    let anchor=null,imageVisible=false,lastAnchorAt=0,lastPoseAt=0,placed=false,placementAt=0,unityReport=null;
+    let anchor=null,imageVisible=false,lastAnchorAt=0,imageLostAt=0,lastPoseAt=0,placed=false,placementAt=0,unityReport=null;
     let xrGl=null,latestCameraFrame=null,manualRenderer=null,raf=0,nextTick=0,lastMode='',rawCamera=null,session=0;
-    let startedAt=0,nextPoseSample=0;
+    let startedAt=0,nextPoseSample=0,recognitionWaitAt=0;
     const tracking={source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
       rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0};
     const finite=value=>typeof value==='number'&&Number.isFinite(value);
+    function loadReferenceImage(target){
+      return new Promise((resolve,reject)=>{
+        const img=new Image();img.onload=()=>{
+          if(img.naturalWidth!==480||img.naturalHeight!==640){reject(Error('認識画像の版か寸法が一致しません。用紙0.3.6のファイル一式を公開してください。'));return;}
+          record('target-image-ready',{name:target.name,width:img.naturalWidth,height:img.naturalHeight});resolve();
+        };
+        img.onerror=()=>reject(Error('認識用の画像を取得できません。paper/image-targetsを確認してください。'));
+        img.src=target.imagePath;
+      });
+    }
     const readyData=fetch('paper/stage-layout.json?v='+webRevision,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('用紙設定が見つかりません。');return r.json();})
       .then(paper=>{layout=paper;return Promise.all(layout.targets.map(t=>fetch(t.data+'?v='+webRevision,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('カラー枠の認識データが見つかりません。');return r.json();})));})
-      .then(data=>{targets=data;for(const target of targets)target.imagePath=new URL(target.imagePath,location.href).href;ready();});
+      .then(async data=>{targets=data;for(const target of targets){const url=new URL(target.imagePath,location.href);url.searchParams.set('v',webRevision);target.imagePath=url.href;}
+        await Promise.all(targets.map(loadReferenceImage));ready();});
     const sizeRow=document.createElement('p');
     sizeRow.innerHTML='印刷したカラー枠の外幅 <input id="color-width" type="number" inputmode="decimal" min="5" max="60" value="18" step="0.1" style="width:4em"> cm · <a href="paper/print.html" target="_blank" rel="noopener">印刷用紙</a>';
     document.getElementById('diagnostics').before(sizeRow);
     const sizeInput=document.getElementById('color-width');
     document.querySelector('.eyebrow').textContent='Roll-by-Blow · '+webRevision+' · '+(imageOnly?'用紙だけの比較':'カラー枠');
-    ui.dimensions.textContent='カラー用紙を認識して自動配置します';
-    ui.guidance.textContent=imageOnly?'比較用です。枠の全体を映し続けてください。用紙の認識を失うと止まります。':'最初はカラー枠の全体を映してください。認識後は一部が外れても周囲の追跡を続けます。';
+    ui.dimensions.textContent='新しい用紙0.3.6を認識して自動配置します';
+    ui.guidance.textContent=imageOnly?'新しい用紙の枠全体を映してください。比較用のため用紙の認識を失うと止まります。':'新しい用紙の枠全体を映してください。見失った後は最大2秒補い、戻らなければ一時停止します。';
     ui.place.hidden=true;ui.coaching.hidden=true;ui.reticle.hidden=true;
     ui.replace.textContent='用紙を読み直す';ui.recenter.textContent='認識し直す';
     function record(kind,detail){
       const event={time:new Date().toISOString(),kind,detail};
       events.push(event);if(events.length>240)events.shift();
-      if(['engine-ready','unity-ready','unity-registered','camera-start','error','tracking-settings'].includes(kind)){
+      if(['engine-ready','unity-ready','unity-registered','camera-start','error','tracking-settings','motion-permission','target-image-ready'].includes(kind)){
         lifecycle.push(event);if(lifecycle.length>30)lifecycle.shift();
       }
     }
@@ -44,8 +55,9 @@
     function samplePose(clock,camera,pose,imageFresh){
       if(clock<nextPoseSample)return;nextPoseSample=clock+500;
       poseHistory.push({elapsedMs:Math.round(clock-startedAt),frame:frame[0],source:tracking.source,
-        rawStatus:tracking.rawStatus,anchorName:anchor?anchor.name:null,imageFresh,
+        rawStatus:tracking.rawStatus,anchorName:anchor?anchor.name:null,imageFresh,imageVisible,
         imageAgeMs:anchor?Math.round(clock-lastAnchorAt):null,
+        imageLostAgeMs:anchor&&!imageVisible&&imageLostAt?Math.round(clock-imageLostAt):null,
         cameraInBoard:pose?copyPosition(pose.position):null,rotationInBoard:pose?copyRotation(pose.rotation):null,
         metersPerWorldUnit:pose?pose.metersPerWorldUnit:null,
         camera:camera?{position:copyPosition(camera.position),rotation:copyRotation(camera.rotation)}:null,
@@ -82,7 +94,7 @@
       session++;
       running=false;starting=false;stopLoop();
       if(window.XR8&&added){try{XR8.stop();}catch(e){record('stop-error',String(e));}}
-      destroyManualRenderer();frame.fill(0);anchor=null;imageVisible=false;placed=false;lastPoseAt=0;
+      destroyManualRenderer();frame.fill(0);anchor=null;imageVisible=false;imageLostAt=0;placed=false;lastPoseAt=0;
       visibleTargets.clear();targetAnchors.clear();
       send('ClearPlacement');sizeInput.disabled=false;
       ui.stop.disabled=ui.replace.disabled=ui.recenter.disabled=true;ui.start.hidden=false;
@@ -101,7 +113,7 @@
       }
       const wasVisible=visibleTargets.has(d.name);visibleTargets.add(d.name);targetAnchors.set(d.name,candidate);
       if(!anchor||anchor.name===d.name||!visibleTargets.has(anchor.name)||performance.now()-lastAnchorAt>200){anchor=candidate;lastAnchorAt=candidate.updatedAt;}
-      imageVisible=visibleTargets.has(anchor.name);tracking.imageUpdates++;
+      imageVisible=visibleTargets.has(anchor.name);if(imageVisible)imageLostAt=0;tracking.imageUpdates++;
       if(!wasVisible){tracking.imageFound++;record('image-found',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight});}
     }
     function update(result){
@@ -115,8 +127,11 @@
       const pose=valid&&anchor?RollColorPose.cameraInBoard(camera,anchor,Number(sizeInput.value)/100):null;
       const clock=performance.now();
       const normal=valid&&camera.trackingStatus==='NORMAL'&&camera.trackingReason!=='INITIALIZING';
-      const imageFresh=imageVisible&&clock-lastAnchorAt<250;
-      const usable=!!pose&&(imageFresh||(!imageOnly&&normal));
+      const imageAgeMs=anchor?clock-lastAnchorAt:Infinity;
+      const lostAgeMs=anchor?(imageVisible?0:(imageLostAt?clock-imageLostAt:imageAgeMs)):Infinity;
+      const imageFresh=imageVisible&&imageAgeMs<250;
+      // imageupdated is a change event, not a guaranteed heartbeat. Follow found/lost visibility.
+      const usable=!!pose&&(imageVisible||(!imageOnly&&normal&&lostAgeMs<=maximumImageGapMs));
       frame[0]++;frame[1]=1;frame[2]=usable?1:0;frame[35]=usable?1:0;
       if(usable){
         lastPoseAt=clock;tracking.cameraInBoard=pose.position;tracking.metersPerWorldUnit=pose.metersPerWorldUnit;
@@ -124,19 +139,21 @@
         frame[6]=pose.rotation.x;frame[7]=pose.rotation.y;frame[8]=pose.rotation.z;frame[9]=pose.rotation.w;
         frame.set(camera.intrinsics,10);frame[36]=canvas.width;frame[37]=canvas.height;
         frame[38]=screen.orientation&&finite(screen.orientation.angle)?screen.orientation.angle:(window.orientation||0);
-        tracking.source=imageFresh?(imageOnly?'image-direct':'image-and-world'):'world-continuation';
-        if(imageFresh)tracking.imageFrames++;else tracking.worldFrames++;
+        tracking.source=imageVisible?(imageOnly?'image-direct':'image-and-world'):'world-continuation';
+        if(imageVisible)tracking.imageFrames++;else tracking.worldFrames++;
         if(!placed&&clock-placementAt>500){placementAt=clock;send('PlaceFromMarker',JSON.stringify({position:{x:0,y:0,z:0},sizeMeters:Number(sizeInput.value)/100}));}
-      }else{tracking.source=anchor?'tracking-unavailable':'waiting-for-image';tracking.limitedFrames++;}
+      }else{tracking.source=anchor?(!imageVisible&&lostAgeMs>maximumImageGapMs?'image-required':'tracking-unavailable'):'waiting-for-image';tracking.limitedFrames++;}
       if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
       samplePose(clock,valid?camera:null,pose,imageFresh);
-      ui.phase.textContent=usable?'プレイ中':'認識中';
-      ui.status.textContent=usable?'カラー用紙を基準に追跡しています。':anchor?'周囲と用紙の追跡を待っています。':'カラー枠の全体を映してください。';
+      ui.phase.textContent=usable?'プレイ中':anchor?'一時停止':'認識中';
+      ui.status.textContent=usable?(imageVisible?'カラー用紙を基準に追跡しています。':'用紙を再認識しています。最大2秒まで表示を補います。'):
+        anchor?'用紙を見失いました。枠全体を映すと自動で再開します。':'新しい用紙0.3.6のカラー枠全体を映してください。';
+      if(!anchor&&clock-recognitionWaitAt>25000)ui.status.textContent='認識できていません。いったん診断を保存して終了してください。';
     }
     function addModules(){
       XR8.XrController.configure({disableWorldTracking:imageOnly,enableLighting:false,enableWorldPoints:false,
         leftHandedAxes:false,mirroredDisplay:false,scale:'responsive',imageTargetData:targets});
-      record('tracking-settings',{webRevision,imageOnly,targetNames:targets.map(t=>t.name),targetCount:targets.length,arTargetFps:30});
+      record('tracking-settings',{webRevision,imageOnly,targetNames:targets.map(t=>t.name),targetCount:targets.length,arTargetFps:30,maximumImageGapMs});
       if(added)return;
       XR8.addCameraPipelineModules([XR8.GlTextureRenderer.pipelineModule(),XR8.XrController.pipelineModule(),{
         name:'roll-color-image-world',
@@ -147,13 +164,17 @@
             if(anchor&&anchor.name===event.detail.name){
               for(const name of visibleTargets){const other=targetAnchors.get(name);if(other){anchor=other;lastAnchorAt=other.updatedAt;break;}}
             }
-            imageVisible=!!anchor&&visibleTargets.has(anchor.name);tracking.imageLost++;record('image-lost',{name:event.detail.name,continueWithWorld:!imageOnly});
+            imageVisible=!!anchor&&visibleTargets.has(anchor.name);if(!imageVisible&&!imageLostAt)imageLostAt=performance.now();
+            tracking.imageLost++;record('image-lost',{name:event.detail.name,continueWithWorld:!imageOnly});
           }},
+          {event:'reality.imageloading',process:event=>record('image-loading',event.detail)},
           {event:'reality.imagescanning',process:event=>record('image-scanning',event.detail)}
         ],
         onStart:result=>{
           if(!starting)return;
           destroyManualRenderer();xrGl=result.GLctx;setProjection(result.canvasWidth,result.canvasHeight);
+          // Set the active image data once after all pipeline modules have attached as well.
+          XR8.XrController.configure({imageTargetData:targets});
           state.cameraFeed.manualError='';
           state.phase='running';starting=false;running=true;startLoop();record('camera-start',{width:result.canvasWidth,height:result.canvasHeight});
         },
@@ -171,11 +192,11 @@
         if(!isSecureContext||!navigator.mediaDevices)throw Error('HTTPSのSafariで開いてください。');
         const width=Number(sizeInput.value)/100;if(!finite(width)||width<.05||width>.6)throw Error('カラー枠の実測した外幅を5〜60cmで入力してください。');
         // Request motion only for the SDK's own world tracking; never overwrite its camera rotation.
-        const permissions=imageOnly?[]:[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
-        const results=await Promise.all(permissions);if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
+        const permissions=[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
+        const results=await Promise.all(permissions);record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
         await readyData;if(token!==session||document.hidden){starting=false;return;}
-        anchor=null;imageVisible=false;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
-        startedAt=performance.now();nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
+        anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
+        startedAt=performance.now();recognitionWaitAt=startedAt;nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
         Object.assign(tracking,{source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
           rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0});
         canvas.width=Math.max(1,innerWidth);canvas.height=Math.max(1,innerHeight);sizeInput.disabled=true;
@@ -188,12 +209,14 @@
     ui.start.addEventListener('click',start);
     ui.stop.addEventListener('click',()=>{stop();ui.status.textContent='終了しました。';});
     for(const button of [ui.replace,ui.recenter])button.addEventListener('click',()=>{
-      anchor=null;imageVisible=false;visibleTargets.clear();targetAnchors.clear();placed=false;frame[2]=frame[35]=0;send('ClearPlacement');
+      anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();placed=false;frame[2]=frame[35]=0;send('ClearPlacement');
+      recognitionWaitAt=performance.now();
       record('clear-image-anchor',null);
     });
     ui.download.addEventListener('click',()=>{
-      const data={prototype:'ARRollCapture-'+webRevision+'-color',webRevision,imageOnly,savedAt:new Date().toISOString(),page:location.href,userAgent:navigator.userAgent,
-        phase:state.phase,error,config,layout,tracking:{...tracking,imageVisible,lastImageAgeMs:anchor?performance.now()-lastAnchorAt:null},
+      const data={prototype:'ARRollCapture-'+webRevision+'-color',webRevision,imageOnly,maximumImageGapMs,savedAt:new Date().toISOString(),page:location.href,userAgent:navigator.userAgent,
+        phase:state.phase,error,config,layout,tracking:{...tracking,imageVisible,lastImageAgeMs:anchor?performance.now()-lastAnchorAt:null,
+          lastImageLostAgeMs:anchor&&!imageVisible&&imageLostAt?performance.now()-imageLostAt:null},
         anchor,rawCamera:rawCamera?{position:rawCamera.position,rotation:rawCamera.rotation}:null,frame:Array.from(frame),unity:unityReport,
         game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
       const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
@@ -310,11 +333,12 @@
       progress:value=>{ui.progress.style.width=Math.round(value*100)+'%';},
       banner:(message,type)=>{record('unity-'+type,String(message));if(type==='error')fail('Unity読み込みエラーです。',message);},fail,
       setUnity:instance=>{unity=instance;record('unity-ready',true);ready();},
-      register:value=>{config=value;record('unity-registered',{playerRevision:value.playerRevision,frameFloatCount:value.frameFloatCount});if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){fail('Unity本体は0.3.4のビルドが必要です。Web接続0.3.5だけでは旧Unityを更新できません。');return;}ready();},
+      register:value=>{config=value;record('unity-registered',{playerRevision:value.playerRevision,frameFloatCount:value.frameFloatCount});if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){fail('Unity本体は0.3.4のビルドが必要です。Web接続の更新だけでは旧Unityを更新できません。');return;}ready();},
       readFrame:()=>{if(!running||performance.now()-lastPoseAt>350){frame[2]=frame[35]=0;}return config&&config.frameFloatCount===39?frame:legacyFrame;},
       report:value=>{unityReport=value;placed=!!value.placed;ui.metrics.textContent=JSON.stringify({webRevision,provider:imageOnly?'image-direct':'image-and-world',tracking,placed,fps:value.fps},null,2);},
       gameCommand:method=>{if(method==='ResetBall')send(method);},
-      gameIsActive:()=>running&&placed&&frame[2]>.5&&performance.now()-lastPoseAt<350
+      gameIsActive:()=>running&&placed&&frame[2]>.5&&performance.now()-lastPoseAt<350,
+      trackingHint:()=>anchor?'用紙を見失いました。枠全体を映すと再開します。':'新しい用紙0.3.6の枠全体を映してください。'
     };
   };
 }());

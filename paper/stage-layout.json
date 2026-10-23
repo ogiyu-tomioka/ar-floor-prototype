@@ -1,5 +1,5 @@
 {
-  "revision": "color-frame-0.3.4",
+  "revision": "color-frame-0.3.6",
   "sourcePrefabSha256": "319f3b071b2cf09761237d5a0144f1202390a5725cf7a56a681efd48c985466e",
   "paper": {
     "widthMm": 297,
@@ -8,14 +8,15 @@
   },
   "target": {
     "kind": "natural-image",
-    "name": "color-board",
-    "physicalWidthMeters": 0.18,
-    "physicalHeightMeters": 0.18,
+    "name": "color-paper-036",
+    "physicalWidthMeters": 0.21,
+    "physicalHeightMeters": 0.28,
     "centerMm": [
       148.5,
       105
     ],
-    "sourceImage": "paper/board-target.png"
+    "sourceImage": "paper/paper-target-0.3.6.png",
+    "imagePlaneRotationDegrees": 90
   },
   "stage": {
     "centerMm": [
@@ -28,12 +29,13 @@
   },
   "targets": [
     {
-      "name": "color-board",
-      "data": "paper/image-targets/color-board.json",
-      "widthRatio": 1,
+      "name": "color-paper-036",
+      "data": "paper/image-targets/color-paper-036.json",
+      "widthRatio": 1.1666666666666667,
       "offsetXRatio": 0,
-      "offsetZRatio": 0
+      "offsetZRatio": 0,
+      "imagePlaneRotationDegrees": 90
     }
   ],
-  "trackingRevision": "0.3.5"
+  "trackingRevision": "0.3.6"
 }

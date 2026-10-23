@@ -1,0 +1,28 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 0,
+    "width": 1680,
+    "height": 2240,
+    "originalWidth": 1680,
+    "originalHeight": 2240,
+    "isRotated": false
+  },
+  "imagePath": "paper/image-targets/color-paper-036_luminance.png",
+  "metadata": {
+    "printRevision": "0.3.6",
+    "physicalWidthMeters": 0.21,
+    "physicalHeightMeters": 0.28,
+    "imagePlaneRotationDegrees": 90
+  },
+  "name": "color-paper-036",
+  "resources": {
+    "originalImage": "color-paper-036_original.png",
+    "croppedImage": "color-paper-036_cropped.png",
+    "thumbnailImage": "color-paper-036_thumbnail.png",
+    "luminanceImage": "color-paper-036_luminance.png"
+  },
+  "created": 1792678182987,
+  "updated": 1792678182987
+}
