@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
   <title>Roll-by-Blow</title>
-  <link rel="stylesheet" href="probe.css?v=0.3.4">
+  <link rel="stylesheet" href="probe.css?v=0.3.9">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
@@ -33,6 +33,7 @@
     </div>
     <details id="diagnostics">
       <summary>確認用の詳細</summary>
+      <p id="roll-version" class="note">ゲーム読み込み待ち / AR接続 0.3.9 / 画面 0.3.9</p>
       <pre id="metrics">準備中</pre>
       <p class="note">診断に写真・映像は含まれません。</p>
       <button id="download">診断を保存</button>
@@ -44,13 +45,14 @@
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
   <script type="importmap">{"imports":{"three":"./external/marker/three.module.js"}}</script>
+  <script src="startup-recovery.js?v=0.3.9"></script>
   <script src="color-pose.js?v=0.3.6"></script>
-  <script src="color-provider.js?v=0.3.6"></script>
+  <script src="color-provider.js?v=0.3.9"></script>
   <script src="camera-orientation.js?v=0.3.4"></script>
   <script src="pose-guard.js?v=0.3.4"></script>
   <script src="table-placement.js?v=0.3.4"></script>
-  <script src="probe.js?v=0.3.4"></script>
-  <script src="roll-game.js?v=0.3.6"></script>
+  <script src="probe.js?v=0.3.9"></script>
+  <script src="roll-game.js?v=0.3.9"></script>
   <script>
     (function () {
       const unityCanvas = document.getElementById('unity-canvas');
@@ -71,27 +73,16 @@
         streamingAssetsUrl: 'StreamingAssets',
         companyName: "LocalPrototype",
         productName: "AR Roll Capture",
-        productVersion: "0.3.4",
+        productVersion: "0.3.9",
         devicePixelRatio: FloorProbeBridge.pixelRatio,
         webglContextAttributes: {alpha: true, premultipliedAlpha: true},
         showBanner: function (message, type) { FloorProbeBridge.banner(message, type); },
         printErr: function (message) { FloorProbeBridge.banner(message, 'stderr'); }
       };
-      const loader = document.createElement('script');
-      loader.src = 'Build/Web.loader.js';
-      loader.onerror = function () { FloorProbeBridge.fail('Unityの読み込みに失敗しました。公開したBuildフォルダーを確認してください。'); };
-      loader.onload = function () {
-        createUnityInstance(unityCanvas, config, FloorProbeBridge.progress)
-          .then(FloorProbeBridge.setUnity)
-          .catch(function (error) { FloorProbeBridge.fail('Unityを起動できませんでした。', error); });
-      };
-      document.body.appendChild(loader);
-      const engine = document.createElement('script');
-      engine.src = 'external/xr/xr.js';
-      engine.async = true;
-      engine.setAttribute('data-preload-chunks', 'slam');
-      engine.onerror = function () { FloorProbeBridge.fail('ARエンジンを読み込めませんでした。externalフォルダーを確認してください。'); };
-      document.body.appendChild(engine);
+      if (window.RollStartup && window.FloorProbeBridge) {
+        RollStartup.boot({canvas: unityCanvas, config: config, bridge: FloorProbeBridge,
+          loaderUrl: 'Build/Web.loader.js'});
+      }
     }());
   </script>
 </body>

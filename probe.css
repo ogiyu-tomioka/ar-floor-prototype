@@ -60,3 +60,46 @@ body.roll-playing.roll-tools-open .bottom { display: block; bottom: calc(175px +
 body.roll-tools-open #roll-blow { opacity: .3; pointer-events: none; }
 body.roll-playing .top #status { display: none; }
 body.roll-playing .top { padding-top: 9px; padding-bottom: 9px; }
+
+/* Compact game controls. AR diagnostics remain in the existing tools panel. */
+.eyebrow { display: none; }
+body.roll-playing .top { padding: 9px 12px; }
+body.roll-playing .top h1 { font-size: 18px; }
+body.roll-playing .top .loading { display: none; }
+#roll-controls { inset: 0; }
+#roll-notice { position: absolute; top: calc(70px + env(safe-area-inset-top)); left: 14px; right: 14px; width: auto; max-width: 520px; margin: 0 auto; padding: 8px 10px; font-size: 12px; line-height: 1.45; background: #102923eb; }
+.roll-toolbar { position: absolute; left: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(198px, calc(100vw - 186px)); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.roll-toolbar button { min-height: 48px; padding: 6px 2px; font-size: 12px; background: #102923f2; pointer-events: auto; }
+.roll-telemetry { position: absolute; left: 14px; bottom: calc(82px + env(safe-area-inset-bottom)); width: min(198px, calc(100vw - 186px)); padding: 8px 9px; border-radius: 10px; background: #102923eb; }
+.roll-power-label { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; }
+#roll-power-meter { display: block; width: 100%; height: 10px; margin: 5px 0; accent-color: #efcb79; }
+#roll-power-meter::-webkit-meter-bar { background: #ffffff20; border: 0; border-radius: 5px; }
+#roll-power-meter::-webkit-meter-optimum-value { background: #efcb79; border-radius: 5px; }
+#roll-wind-legend { display: block; color: #bad3c9; font-size: 10px; line-height: 1.4; }
+.roll-blower { position: absolute; right: 14px; bottom: calc(68px + env(safe-area-inset-bottom)); width: 152px; height: 127px; pointer-events: none; }
+.roll-blower svg { display: block; width: 100%; height: 100%; }
+.blower-air { opacity: 0; }
+.is-blowing .blower-air { opacity: 1; }
+.is-blowing .blower-lamp { fill: #ffda78; }
+#roll-blow { position: absolute; right: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); width: 150px; height: 60px; margin: 0; border-radius: 20px; font-size: 14px; }
+body.roll-tools-open .roll-telemetry, body.roll-tools-open .roll-blower { display: none; }
+body.roll-playing.roll-tools-open .bottom { bottom: calc(88px + env(safe-area-inset-bottom)); max-height: min(52%, 390px); }
+body.roll-playing.roll-tools-open #roll-notice { display: none; }
+body.roll-playing.roll-tools-open #dimensions,
+body.roll-playing.roll-tools-open #guidance,
+body.roll-playing.roll-tools-open #start,
+body.roll-playing.roll-tools-open #place { display: none; }
+@media (max-height: 600px) {
+  #roll-notice { top: calc(63px + env(safe-area-inset-top)); padding: 5px 8px; }
+  .roll-blower { width: 120px; height: 100px; }
+}
+
+#roll-recovery { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); background: #071b1de6; }
+.recovery-card { width: 100%; max-width: 420px; max-height: 100%; overflow: auto; padding: 20px; border: 1px solid #adc9ba66; border-radius: 20px; background: #102923; }
+.recovery-card h2 { font-size: 19px; line-height: 1.5; margin: 0; }
+.recovery-card p { overflow-wrap: anywhere; }
+.recovery-card .note { margin-top: 12px; font-size: 12px; }
+.recovery-card button { display: block; width: 100%; margin-top: 12px; min-height: 48px; }
+.recovery-card details { margin-top: 14px; }
+body.roll-recovery-open #roll-controls { visibility: hidden; }
+#roll-reset:disabled { opacity: 1; color: #b8cac0; background: #263b35ed; border-color: #9cb8ab30; }

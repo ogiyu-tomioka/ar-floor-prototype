@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.6',maximumImageGapMs=2000;
+    const webRevision='0.3.9',maximumImageGapMs=2000;
     const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
@@ -16,24 +16,55 @@
     const visibleTargets=new Set(),targetAnchors=new Map();
     let anchor=null,imageVisible=false,lastAnchorAt=0,imageLostAt=0,lastPoseAt=0,placed=false,placementAt=0,unityReport=null;
     let xrGl=null,latestCameraFrame=null,manualRenderer=null,raf=0,nextTick=0,lastMode='',rawCamera=null,session=0;
-    let startedAt=0,nextPoseSample=0,recognitionWaitAt=0;
+    let startedAt=0,nextPoseSample=0,recognitionWaitAt=0,startTimer=0,gameReadyAt=0;
+    let readyData=null,dataLoaded=false,dataAttempt=0;
     const tracking={source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
       rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0};
     const finite=value=>typeof value==='number'&&Number.isFinite(value);
     function loadReferenceImage(target){
       return new Promise((resolve,reject)=>{
-        const img=new Image();img.onload=()=>{
-          if(img.naturalWidth!==480||img.naturalHeight!==640){reject(Error('認識画像の版か寸法が一致しません。用紙0.3.6のファイル一式を公開してください。'));return;}
-          record('target-image-ready',{name:target.name,width:img.naturalWidth,height:img.naturalHeight});resolve();
+        const img=new Image();
+        const finish=e=>{clearTimeout(timer);img.onload=img.onerror=null;if(e)reject(e);else resolve();};
+        const timer=setTimeout(()=>finish(Error('認識用の画像の読み込みが時間内に完了しませんでした。')),15000);
+        img.onload=()=>{
+          if(img.naturalWidth!==480||img.naturalHeight!==640){finish(Error('用紙0.3.6の認識画像一式を公開してください。'));return;}
+          record('target-image-ready',{name:target.name,width:img.naturalWidth,height:img.naturalHeight});finish();
         };
-        img.onerror=()=>reject(Error('認識用の画像を取得できません。paper/image-targetsを確認してください。'));
+        img.onerror=()=>finish(Error('認識用の画像を取得できません。paper/image-targetsを確認してください。'));
         img.src=target.imagePath;
       });
     }
-    const readyData=fetch('paper/stage-layout.json?v='+webRevision,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('用紙設定が見つかりません。');return r.json();})
-      .then(paper=>{layout=paper;return Promise.all(layout.targets.map(t=>fetch(t.data+'?v='+webRevision,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('カラー枠の認識データが見つかりません。');return r.json();})));})
-      .then(async data=>{targets=data;for(const target of targets){const url=new URL(target.imagePath,location.href);url.searchParams.set('v',webRevision);target.imagePath=url.href;}
-        await Promise.all(targets.map(loadReferenceImage));ready();});
+    async function fetchJson(url){
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),15000);
+      try{const r=await fetch(url,{cache:'no-cache',signal:controller.signal});if(!r.ok)throw Error('認識データを取得できません: '+r.status);return await r.json();}
+      finally{clearTimeout(timer);}
+    }
+    function ensureData(){
+      if(dataLoaded)return Promise.resolve();
+      if(readyData)return readyData;
+      const attempt=++dataAttempt;
+      readyData=(async()=>{
+        const paper=await fetchJson('paper/stage-layout.json?v='+webRevision);
+        if(!Array.isArray(paper.targets)||!paper.targets.length)throw Error('用紙の認識設定がありません。');
+        const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+webRevision)));
+        for(const target of data){const url=new URL(target.imagePath,location.href);url.searchParams.set('v',webRevision);url.searchParams.set('attempt',String(attempt));target.imagePath=url.href;}
+        await Promise.all(data.map(loadReferenceImage));
+        if(attempt!==dataAttempt)return;
+        layout=paper;targets=data;dataLoaded=true;ready();
+      })().catch(e=>{if(attempt===dataAttempt){readyData=null;dataLoaded=false;}throw e;});
+      return readyData;
+    }
+    async function waitForPermissions(permissions){
+      let timer;
+      try{return await Promise.race([Promise.all(permissions),new Promise((resolve,reject)=>{
+        timer=setTimeout(()=>reject(Error('モーションの利用許可を確認できませんでした。Safariの許可表示を確認して再試行してください。')),30000);
+      })]);}finally{clearTimeout(timer);}
+    }
+    function prepareData(){
+      const pending=ensureData(),attempt=dataAttempt;
+      pending.then(ready).catch(e=>{if(attempt===dataAttempt)fail('カラー用紙のデータを読み込めませんでした。',e);});
+    }
     const sizeRow=document.createElement('p');
     sizeRow.innerHTML='印刷したカラー枠の外幅 <input id="color-width" type="number" inputmode="decimal" min="5" max="60" value="18" step="0.1" style="width:4em"> cm · <a href="paper/print.html" target="_blank" rel="noopener">印刷用紙</a>';
     document.getElementById('diagnostics').before(sizeRow);
@@ -64,7 +95,11 @@
         image:anchor?{position:copyPosition(anchor.position),rotation:copyRotation(anchor.rotation),scale:anchor.scale,scaledWidth:anchor.scaledWidth}:null});
       if(poseHistory.length>240)poseHistory.shift();
     }
-    function send(method,value){if(unity)unity.SendMessage('FloorProbe',method,value===undefined?'':value);}
+    function send(method,value){
+      if(!unity)return;
+      try{unity.SendMessage('FloorProbe',method,value===undefined?'':value);}
+      catch(e){record('unity-message-error',String(e));unity=null;config=null;if(window.RollStartup)RollStartup.fail('ゲーム本体との接続が切れました。',e,'boot',true);}
+    }
     function ready(){
       if(unity&&config&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
         state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'用紙だけで比較を開始':'カラー枠で開始';
@@ -91,7 +126,7 @@
       raf=requestAnimationFrame(tick);
     }
     function stop(){
-      session++;
+      session++;clearTimeout(startTimer);startTimer=0;gameReadyAt=0;
       running=false;starting=false;stopLoop();
       if(window.XR8&&added){try{XR8.stop();}catch(e){record('stop-error',String(e));}}
       destroyManualRenderer();frame.fill(0);anchor=null;imageVisible=false;imageLostAt=0;placed=false;lastPoseAt=0;
@@ -100,7 +135,8 @@
       ui.stop.disabled=ui.replace.disabled=ui.recenter.disabled=true;ui.start.hidden=false;
       state.phase='stopped';ready();
     }
-    function fail(message,cause){error=message+(cause?' '+String(cause.message||cause):'');stop();state.phase='error';ui.phase.textContent='エラー';ui.status.textContent=error;record('error',error);}
+    function fail(message,cause){error=message+(cause?' '+String(cause.message||cause):'');stop();state.phase='error';ui.phase.textContent='エラー';ui.status.textContent=message;record('error',error);if(window.RollStartup)RollStartup.fail(message,cause||message,'ar');}
+    function deferFailure(message){const token=session;setTimeout(()=>{if(token===session)fail(message);},0);}
     function imageUpdate(event){
       const d=event.detail;
       if(!d||!layout)return;
@@ -148,7 +184,7 @@
       ui.phase.textContent=usable?'プレイ中':anchor?'一時停止':'認識中';
       ui.status.textContent=usable?(imageVisible?'カラー用紙を基準に追跡しています。':'用紙を再認識しています。最大2秒まで表示を補います。'):
         anchor?'用紙を見失いました。枠全体を映すと自動で再開します。':'新しい用紙0.3.6のカラー枠全体を映してください。';
-      if(!anchor&&clock-recognitionWaitAt>25000)ui.status.textContent='認識できていません。いったん診断を保存して終了してください。';
+      if(!anchor&&clock-recognitionWaitAt>25000){recognitionWaitAt=Infinity;deferFailure('用紙を認識できませんでした。枠全体と明るさを確認して、もう一度開始してください。');}
     }
     function addModules(){
       XR8.XrController.configure({disableWorldTracking:imageOnly,enableLighting:false,enableWorldPoints:false,
@@ -171,7 +207,8 @@
           {event:'reality.imagescanning',process:event=>record('image-scanning',event.detail)}
         ],
         onStart:result=>{
-          if(!starting)return;
+          if(!starting||(window.RollStartup&&!RollStartup.canResume()))return;
+          clearTimeout(startTimer);startTimer=0;if(window.RollStartup)RollStartup.clear();
           destroyManualRenderer();xrGl=result.GLctx;setProjection(result.canvasWidth,result.canvasHeight);
           // Set the active image data once after all pipeline modules have attached as well.
           XR8.XrController.configure({imageTargetData:targets});
@@ -187,20 +224,21 @@
     }
     async function start(){
       if(starting||running||!unity||!config||!engineReady)return;
-      starting=true;ui.start.disabled=true;const token=++session;
+      starting=true;error='';ui.start.disabled=true;ui.status.textContent='カメラとモーションの利用を確認しています。';if(window.RollStartup)RollStartup.clear();const token=++session;
       try{
         if(!isSecureContext||!navigator.mediaDevices)throw Error('HTTPSのSafariで開いてください。');
         const width=Number(sizeInput.value)/100;if(!finite(width)||width<.05||width>.6)throw Error('カラー枠の実測した外幅を5〜60cmで入力してください。');
         // Request motion only for the SDK's own world tracking; never overwrite its camera rotation.
         const permissions=[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
-        const results=await Promise.all(permissions);record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
-        await readyData;if(token!==session||document.hidden){starting=false;return;}
+        const results=await waitForPermissions(permissions);if(token!==session||document.hidden)return;record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
+        await ensureData();if(token!==session||document.hidden){starting=false;return;}
         anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
         startedAt=performance.now();recognitionWaitAt=startedAt;nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
         Object.assign(tracking,{source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
           rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0});
         canvas.width=Math.max(1,innerWidth);canvas.height=Math.max(1,innerHeight);sizeInput.disabled=true;
-        addModules();state.phase='starting';
+        addModules();state.phase='starting';ui.status.textContent='カメラを起動しています。';
+        startTimer=setTimeout(()=>{if(token===session&&starting)fail('カメラの起動が時間内に完了しませんでした。もう一度開始できます。');},20000);
         ui.start.hidden=true;ui.stop.disabled=ui.replace.disabled=ui.recenter.disabled=false;
         await XR8.run({canvas,webgl2:true,ownRunLoop:false,allowedDevices:XR8.XrConfig.device().MOBILE,
           cameraConfig:{direction:XR8.XrConfig.camera().BACK},glContextConfig:{alpha:false,antialias:false,preserveDrawingBuffer:false}});
@@ -218,13 +256,13 @@
         phase:state.phase,error,config,layout,tracking:{...tracking,imageVisible,lastImageAgeMs:anchor?performance.now()-lastAnchorAt:null,
           lastImageLostAgeMs:anchor&&!imageVisible&&imageLostAt?performance.now()-imageLostAt:null},
         anchor,rawCamera:rawCamera?{position:rawCamera.position,rotation:rawCamera.rotation}:null,frame:Array.from(frame),unity:unityReport,
-        game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
+        startup:window.RollStartup?RollStartup.snapshot():null,game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
       const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='roll-by-blow-color-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
     });
     document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',stop);
     window.addEventListener('xrloaded',()=>{engineReady=true;record('engine-ready',true);ready();});
-    readyData.catch(e=>fail('カラー用紙のデータを読み込めませんでした。',e));
+    prepareData();
     function destroyManualRenderer() {
     if (manualRenderer) {
       try { manualRenderer.destroy(); } catch (error) { record('renderer-cleanup', String(error)); }
@@ -329,14 +367,26 @@
     }
   }
     return {
+      retryReady:()=>{error='';prepareData();},
+      retryStart:()=>{stop();error='';if(!unity||!config||!engineReady){ready();if(window.RollStartup)RollStartup.fail('まだゲームの準備が完了していません。','Boot resources are not ready','boot');return;}dataAttempt++;dataLoaded=false;readyData=null;start();},
+      stopForFailure:stop,
+      startupState:()=>({registered:!!config,engineReady,dataLoaded,starting,running}),
       pixelRatio:1,captureContext:(kind,gl)=>{if(gl&&/webgl/.test(kind))installUnityAlphaGuard(gl);},
       progress:value=>{ui.progress.style.width=Math.round(value*100)+'%';},
       banner:(message,type)=>{record('unity-'+type,String(message));if(type==='error')fail('Unity読み込みエラーです。',message);},fail,
       setUnity:instance=>{unity=instance;record('unity-ready',true);ready();},
       register:value=>{config=value;record('unity-registered',{playerRevision:value.playerRevision,frameFloatCount:value.frameFloatCount});if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){fail('Unity本体は0.3.4のビルドが必要です。Web接続の更新だけでは旧Unityを更新できません。');return;}ready();},
       readFrame:()=>{if(!running||performance.now()-lastPoseAt>350){frame[2]=frame[35]=0;}return config&&config.frameFloatCount===39?frame:legacyFrame;},
-      report:value=>{unityReport=value;placed=!!value.placed;ui.metrics.textContent=JSON.stringify({webRevision,provider:imageOnly?'image-direct':'image-and-world',tracking,placed,fps:value.fps},null,2);},
-      gameCommand:method=>{if(method==='ResetBall')send(method);},
+      report:value=>{
+        unityReport=value;placed=!!value.placed;
+        ui.metrics.textContent=JSON.stringify({webRevision,provider:imageOnly?'image-direct':'image-and-world',tracking,placed,fps:value.fps},null,2);
+        if(running&&placed){
+          const game=window.RollCaptureBridge?RollCaptureBridge.snapshot().report:null;
+          if(!game){if(!gameReadyAt)gameReadyAt=performance.now();else if(performance.now()-gameReadyAt>8000){gameReadyAt=Infinity;deferFailure('ステージのゲームを開始できませんでした。もう一度開始してください。');}}
+          else{gameReadyAt=0;if(game.message==='Stage definition missing')deferFailure('ステージの設定を読み込めませんでした。');}
+        }else gameReadyAt=0;
+      },
+      gameCommand:method=>{if(method==='RequestReset'||method==='ResetBall')send('RequestReset');},
       gameIsActive:()=>running&&placed&&frame[2]>.5&&performance.now()-lastPoseAt<350,
       trackingHint:()=>anchor?'用紙を見失いました。枠全体を映すと再開します。':'新しい用紙0.3.6の枠全体を映してください。'
     };

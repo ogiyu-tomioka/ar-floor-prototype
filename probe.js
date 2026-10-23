@@ -119,8 +119,8 @@
 
   function send(method, argument) {
     if (!state.unity || !state.registered) return;
-    if (argument === undefined) state.unity.SendMessage('FloorProbe', method);
-    else state.unity.SendMessage('FloorProbe', method, argument);
+    if (argument === undefined) state.unity.SendMessage('FloorProbe', method === 'ResetBall' ? 'RequestReset' : method);
+    else state.unity.SendMessage('FloorProbe', method === 'ResetBall' ? 'RequestReset' : method, argument);
   }
 
   function useArCamera() {
@@ -775,7 +775,7 @@
         '机を映したまま姿勢を戻してください。戻らない場合はAR操作から「認識し直す」を押してください。');
       else if (state.placed && state.placementMode === 'display-check')
         message('表示だけの確認中です。', 'この配置は机の認識結果ではありません。「置き直す」で自動推定へ戻れます。');
-      else if (state.placed) message('スマホをブロアーにして球を誘導しよう。', '中央で狙い、スマホの上端で押す向きを変えます。矢印を見ながらボタンを押してください。');
+      else if (state.placed) message('スマホをブロアーにして球を誘導しよう。', '中央で狙い、カメラの向きへ風を出します。真下では横へ押す力が弱まります。');
       else if (state.pendingAt) message('推定した場所へ自動配置しています。');
       else if (initializing) message(recognitionSeconds >= 20 ? '認識に時間がかかっています。' : '机全体を映して、端末をゆっくり前後へ。',
         '明るく模様のある机を使い、20〜30cmほど前後へ動かしてください。白一色・光沢の強い場所は推定しにくくなります。');
@@ -959,7 +959,7 @@
   window.FloorProbeBridge = {
     pixelRatio: pixelRatio,
     gameCommand: function (method) {
-      if (method === 'ResetBall') send(method);
+      if (method === 'RequestReset' || method === 'ResetBall') send('RequestReset');
     },
     gameIsActive: function () {
       return state.phase === 'running' && state.placed && !state.cameraOnly
