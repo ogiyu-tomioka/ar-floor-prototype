@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.9',maximumImageGapMs=2000;
+    const webRevision='0.3.10',maximumImageGapMs=2000;
     const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
@@ -102,7 +102,7 @@
     }
     function ready(){
       if(unity&&config&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
-        state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'用紙だけで比較を開始':'カラー枠で開始';
+        state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'許可して比較を始める':'許可して始める';
         ui.loading.hidden=true;ui.status.textContent='準備できました。';ui.phase.textContent='開始前';
       }
     }

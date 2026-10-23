@@ -758,7 +758,7 @@
     if (state.phase !== 'error') {
       ui.start.disabled = !state.engineReady || !state.unity || !state.registered;
       ui.start.textContent = state.phase === 'loading' ? '読み込み中…'
-        : state.phase === 'paused' ? 'ARを再開' : 'ARを開始';
+        : state.phase === 'paused' ? 'ARを再開' : '許可して始める';
     }
     ui.replace.disabled = !running || !state.placed;
     ui.recenter.disabled = !running;
