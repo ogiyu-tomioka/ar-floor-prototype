@@ -12,9 +12,33 @@
   document.body.appendChild(panel);
   const retry = document.getElementById('recovery-retry');
   let failure = null, bootOptions = null, bootPromise = null;
-  let unityInstance = null, unityPromise = null, enginePromise = null, xrLoaded = !!window.XR8;
+  let unityInstance = null, unityPromise = null, enginePromise = null, xrLoaded = !!(window.XR8 && window.XR8.XrController);
   let unityLoading = false, unityStallTimer = 0, registrationTimer = 0, stopScheduled = false;
-  const history = [];
+  const history = [], bootHistory = [];
+  let bootStage = 'idle';
+  function stage(name, label) {
+    bootStage = name;
+    bootHistory.push({time:new Date().toISOString(), stage:name});
+    if(bootHistory.length > 40)bootHistory.shift();
+    if(label) {
+      document.getElementById('status').textContent = label;
+      const start=document.getElementById('start');
+      if(!start.hidden){start.disabled=true;start.textContent=label;}
+    }
+  }
+  function deadline(task, timeoutMs, message, needsReload = false) {
+    return new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{const e=Error(message);e.needsReload=needsReload;reject(e);},timeoutMs);
+      Promise.resolve(task).then(value=>{clearTimeout(timer);resolve(value);},e=>{clearTimeout(timer);reject(e);});
+    });
+  }
+  function resourceSnapshot() {
+    if(typeof performance.getEntriesByType!=='function')return [];
+    return performance.getEntriesByType('resource').filter(e=>/\/(external\/xr|Build)\//.test(e.name)).slice(-20).map(e=>({
+      path:new URL(e.name,location.href).pathname,durationMs:Math.round(e.duration),
+      transferSize:e.transferSize,encodedBodySize:e.encodedBodySize,responseStatus:e.responseStatus
+    }));
+  }
   const fatalRuntime = value => /out of bounds|memory access|unreachable|RuntimeError|abort\(|aborted/i.test(String(value));
   function clear() {
     if(failure&&failure.fatal)return;
@@ -23,7 +47,7 @@
   }
   function fail(message, detail, scope = 'ar', fatal = false, pending = false) {
     if (failure && failure.fatal && !fatal) return;
-    failure = {message, detail:String(detail || ''), scope, fatal, pending};
+    failure = {message, detail:String(detail || ''), scope, fatal, pending, stage:bootStage};
     history.push({time:new Date().toISOString(), ...failure}); if(history.length > 30) history.shift();
     if(window.RollCaptureBridge && RollCaptureBridge.suspend) RollCaptureBridge.suspend();
     if(scope==='boot'&&!stopScheduled){
@@ -38,10 +62,10 @@
     document.getElementById('recovery-message').textContent = message;
     document.getElementById('recovery-detail').textContent = failure.detail || message;
     const versions=document.getElementById('roll-version');
-    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.13';
+    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.14';
     const permission = /NotAllowed|permission|denied|許可/i.test(failure.detail + message);
     document.getElementById('recovery-help').textContent = fatal
-      ? 'ゲーム本体の再起動が必要です。下のボタンでページを読み直してください。'
+      ? 'ARとゲームの準備をやり直す必要があります。下のボタンでページを読み直してください。'
       : pending ? '読み込みの完了を待っています。長く変わらない場合は、下のボタンで読み直せます。'
       : permission ? 'Safariでカメラとモーションの利用を許可してください。拒否を保存した場合はSafari側の設定変更が必要です。'
       : '通信や用紙の状態を確認して、そのまま再試行できます。';
@@ -59,27 +83,52 @@
         clearTimeout(timer);script.onload=script.onerror=null;
         if(error){script.remove();reject(error);}else resolve();
       };
-      const timer=setTimeout(()=>finish(Error('読み込みが時間内に完了しませんでした: '+url)),timeoutMs);
+      const timer=setTimeout(()=>{
+        const e=Error('読み込みが時間内に完了しませんでした: '+url);
+        if(url==='external/xr/xr.js')e.needsReload=true;
+        finish(e);
+      },timeoutMs);
       script.onload=()=>finish();script.onerror=()=>finish(Error('ファイルを読み込めませんでした: '+url));
       document.body.appendChild(script);
     });
   }
-  window.addEventListener('xrloaded',()=>{xrLoaded=true;});
   function ensureEngine() {
-    if(xrLoaded)return Promise.resolve();
+    if(xrLoaded && window.XR8 && window.XR8.XrController)return Promise.resolve();
     if(enginePromise)return enginePromise;
-    if(window.XR8){const e=Error('ARエンジンの準備が完了していません。');e.needsReload=true;return Promise.reject(e);}
-    enginePromise=new Promise((resolve,reject)=>{
-      const ready=()=>{clearTimeout(timer);window.removeEventListener('xrloaded',ready);resolve();};
-      const timer=setTimeout(()=>{
-        window.removeEventListener('xrloaded',ready);
-        const e=Error('ARエンジンの準備が時間内に完了しませんでした。');e.needsReload=!!window.XR8;reject(e);
-      },45000);
-      window.addEventListener('xrloaded',ready);
-      waitForScript('external/xr/xr.js',{'data-preload-chunks':'slam'}).catch(e=>{
-        clearTimeout(timer);window.removeEventListener('xrloaded',ready);reject(e);
-      });
-    }).catch(e=>{enginePromise=null;throw e;});
+    enginePromise=(async()=>{
+      if(!window.XR8) {
+        stage('xr-script','ARのデータを読み込んでいます…');
+        let exported;
+        const published=new Promise(resolve=>{exported=resolve;});
+        const ready=()=>{if(window.XR8)exported();};
+        window.addEventListener('xrloaded',ready);
+        try {
+          // Load the base first; SDK-managed tracking initialization is awaited separately below.
+          await waitForScript('external/xr/xr.js',{},45000);
+          stage('xr-export','ARの準備を進めています…');
+          if(!window.XR8)await deadline(published,15000,'AR本体の読み込み後、準備完了を確認できませんでした。',true);
+        } finally {window.removeEventListener('xrloaded',ready);}
+      }
+      const xr=window.XR8;
+      if(!xr || typeof xr.initialize!=='function' || typeof xr.loadChunk!=='function') {
+        const e=Error('ARエンジンのファイルが対応する構成ではありません。');e.needsReload=true;throw e;
+      }
+      stage('xr-core','ARの基本機能を準備しています…');
+      try {await deadline(xr.initialize(),60000,'ARの基本機能の初期化が時間内に完了しませんでした。',true);}
+      catch(e){const error=e instanceof Error?e:Error(String(e));error.needsReload=true;throw error;}
+      if(!xr.XrController) {
+        stage('xr-tracking','用紙を追跡する機能を準備しています…');
+        await deadline(xr.loadChunk('slam'),60000,'ARの追跡機能の準備が時間内に完了しませんでした。',true);
+      }
+      if(!xr.XrController){const e=Error('ARの追跡機能を読み込めませんでした。');e.needsReload=true;throw e;}
+      xrLoaded=true;stage('xr-ready');
+      window.dispatchEvent(new Event('rollxrready'));
+    })().catch(e=>{
+      enginePromise=null;
+      const error=e instanceof Error?e:Error(String(e));
+      if(fatalRuntime(error))error.needsReload=true;
+      throw error;
+    });
     return enginePromise;
   }
   function resetUnityWatchdog() {
@@ -123,9 +172,14 @@
     if(failure&&failure.fatal)return Promise.resolve(false);
     if(bootPromise)return bootPromise;
     clear();
-    bootPromise=Promise.all([ensureEngine(),ensureUnity()]).then(()=>{
+    bootPromise=ensureEngine().then(()=>{
+      if(failure&&failure.fatal)return;
+      stage('unity-runtime','ゲームを読み込んでいます…');
+      return ensureUnity();
+    }).then(()=>{
       if(failure&&failure.fatal)return false;
       if(!failure||failure.scope==='boot')clear();
+      stage('boot-ready');
       clearTimeout(registrationTimer);
       registrationTimer=setTimeout(()=>{
         if(bootOptions.bridge.startupState&&!bootOptions.bridge.startupState().registered)
@@ -150,7 +204,7 @@
   document.getElementById('recovery-diagnostic').addEventListener('click',()=>{
     const download=document.getElementById('download');
     if(window.FloorProbeBridge&&download){download.click();return;}
-    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.13',failure,history},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.14',failure,history},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='roll-by-blow-startup.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   });
@@ -163,6 +217,7 @@
   window.addEventListener('unhandledrejection',event=>{
     fail('開始処理で問題が発生しました。',event.reason,'boot',true);
   });
-  window.RollStartup={boot,fail,clear,snapshot:()=>({failure,history:history.slice(),unityLoading,xrLoaded}),
+  window.RollStartup={boot,fail,clear,snapshot:()=>({failure,history:history.slice(),bootStage,bootHistory:bootHistory.slice(),unityLoading,xrLoaded,
+      xrHasGlobal:!!window.XR8,xrControllerReady:!!(window.XR8&&window.XR8.XrController),resources:resourceSnapshot()}),
     pending:()=>!!failure,canResume:()=>!failure||!failure.fatal};
 }());

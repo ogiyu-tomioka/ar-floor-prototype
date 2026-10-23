@@ -845,11 +845,13 @@
   }
 
   function onEngineLoaded() {
+    if (state.engineReady || !window.XR8 || !window.XR8.XrController) return;
     state.engineReady = true;
     record('engine-ready', 'Local XR Engine loaded.');
     maybeReady();
   }
   window.addEventListener('xrloaded', onEngineLoaded);
+  window.addEventListener('rollxrready', onEngineLoaded);
   if (window.XR8) onEngineLoaded();
 
   ui.start.addEventListener('click', start);

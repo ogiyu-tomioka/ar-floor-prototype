@@ -209,7 +209,7 @@
       if (versionNote) {
         let arVersion = '—';
         try { arVersion = JSON.parse(document.getElementById('metrics').textContent).webRevision || '従来モード'; } catch (_) {}
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.13';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.14';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();

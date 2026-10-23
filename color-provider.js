@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.13',maximumImageGapMs=2000;
+    const webRevision='0.3.14',maximumImageGapMs=2000;
     const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
@@ -12,7 +12,7 @@
     const state={phase:'loading',manualBackground:false,cameraFeed:{gpuFrames:0,renderCallbacks:0,freshVideoFrames:0,
       texturePresent:false,textureContextMatches:null,textureWidth:0,textureHeight:0,repeatFrame:null,videoTime:null,
       viewport:null,manualDraws:0,manualError:''}};
-    let unity,config,layout,targets=[],engineReady=!!window.XR8,added=false,error='',running=false,starting=false;
+    let unity,config,layout,targets=[],engineReady=!!(window.XR8&&window.XR8.XrController),added=false,error='',running=false,starting=false;
     const visibleTargets=new Set(),targetAnchors=new Map();
     let anchor=null,imageVisible=false,lastAnchorAt=0,imageLostAt=0,lastPoseAt=0,placed=false,placementAt=0,unityReport=null;
     let xrGl=null,latestCameraFrame=null,manualRenderer=null,raf=0,nextTick=0,lastMode='',rawCamera=null,session=0;
@@ -260,7 +260,12 @@
       const a=document.createElement('a');a.href=url;a.download='roll-by-blow-color-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
     });
     document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',stop);
-    window.addEventListener('xrloaded',()=>{engineReady=true;record('engine-ready',true);ready();});
+    function engineLoaded(){
+      if(engineReady||!window.XR8||!window.XR8.XrController)return;
+      engineReady=true;record('engine-ready',true);ready();
+    }
+    window.addEventListener('xrloaded',engineLoaded);
+    window.addEventListener('rollxrready',engineLoaded);
     prepareData();
     function destroyManualRenderer() {
     if (manualRenderer) {
