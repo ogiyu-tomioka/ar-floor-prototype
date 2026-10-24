@@ -107,10 +107,9 @@ body.roll-recovery-open #roll-controls { visibility: hidden; }
 .is-blowing.has-wind-aim .roll-airflow path { animation-play-state: running; }
 .roll-blower { bottom: calc(80px + env(safe-area-inset-bottom)); height: 139px; }
 .roll-blower svg { height: 118px; }
-.roll-camera-hint { display: block; width: 100%; padding: 3px 0; border-radius: 6px; background: #102923da; color: #d4f9e8; text-align: center; font-size: 10px; line-height: 15px; }
 body.roll-tools-open .roll-aim, body.roll-tools-open .roll-airflow { display: none; }
 @keyframes wind-inward { from { stroke-dashoffset: 0; stroke-dasharray: 10 90; opacity: .8; } to { stroke-dashoffset: -100; stroke-dasharray: 4 96; opacity: .2; } }
-@media (max-height: 600px) { .roll-blower { height: 113px; } .roll-blower svg { height: 92px; } .roll-camera-hint { font-size: 9px; } }
+@media (max-height: 600px) { .roll-blower { height: 113px; } .roll-blower svg { height: 92px; } }
 @media (prefers-reduced-motion: reduce) { .roll-airflow path { animation: none; stroke-dasharray: 9 91; stroke-dashoffset: -45; opacity: .55; } .roll-aim { transition: none; } }
 
 /* Touch-and-hold stays in the game; diagnostic text remains copyable. */
@@ -186,3 +185,13 @@ body.roll-tools-open .roll-blower { display: none; }
 .is-blowing .roll-blower .blower-idle { display: none; }
 .is-blowing .roll-blower .blower-held { display: block; }
 @media (max-height: 600px) { .roll-blower .blower-held { height: 92px; } }
+
+/* In-context recovery after five seconds; normal play keeps the single compact notice. */
+#roll-guidance { position: absolute; top: calc(64px + env(safe-area-inset-top)); left: 14px; right: 14px; max-width: 520px; margin: 0 auto; z-index: 3; }
+#roll-guidance #roll-notice { position: static; width: 100%; max-width: none; margin: 0; }
+#roll-reacquire { margin-top: 8px; padding: 11px 13px; border-radius: 12px; background: #102923f0; text-align: center; }
+#roll-reacquire-help { margin: 0; font-size: 13px; line-height: 1.6; color: #e0efe5; }
+#roll-reacquire-button { display: block; margin: 9px auto 0; min-height: 44px; min-width: 180px; padding: 9px 14px; background: #b5f2d3; color: #12362d; font-weight: 700; pointer-events: auto; }
+body.roll-tools-open #roll-guidance { display: none; }
+.roll-blower { height: 118px; }
+@media (max-height: 600px) { .roll-blower { height: 92px; } }

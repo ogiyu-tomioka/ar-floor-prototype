@@ -62,7 +62,7 @@
     document.getElementById('recovery-message').textContent = message;
     document.getElementById('recovery-detail').textContent = failure.detail || message;
     const versions=document.getElementById('roll-version');
-    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.16';
+    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.17';
     const permission = /NotAllowed|permission|denied|許可/i.test(failure.detail + message);
     document.getElementById('recovery-help').textContent = fatal
       ? 'ARとゲームの準備をやり直す必要があります。下のボタンでページを読み直してください。'
@@ -204,7 +204,7 @@
   document.getElementById('recovery-diagnostic').addEventListener('click',()=>{
     const download=document.getElementById('download');
     if(window.FloorProbeBridge&&download){download.click();return;}
-    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.16',failure,history},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.17',failure,history},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='roll-by-blow-startup.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   });

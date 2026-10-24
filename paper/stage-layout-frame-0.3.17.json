@@ -1,0 +1,41 @@
+{
+  "revision": "color-frame-region-0.3.17",
+  "sourcePrefabSha256": "319f3b071b2cf09761237d5a0144f1202390a5725cf7a56a681efd48c985466e",
+  "paper": {
+    "widthMm": 297,
+    "heightMm": 210,
+    "orientation": "landscape"
+  },
+  "target": {
+    "kind": "natural-image",
+    "name": "color-frame-0317",
+    "physicalWidthMeters": 0.135,
+    "physicalHeightMeters": 0.18,
+    "centerMm": [
+      148.5,
+      105
+    ],
+    "sourceImage": "paper/frame-target-0.3.17.png",
+    "imagePlaneRotationDegrees": 0
+  },
+  "stage": {
+    "centerMm": [
+      148.5,
+      105
+    ],
+    "outerWidthMeters": 0.18,
+    "outerUnits": 22,
+    "openingUnits": 20
+  },
+  "targets": [
+    {
+      "name": "color-frame-0317",
+      "data": "paper/image-targets/color-frame-0317.json",
+      "widthRatio": 0.75,
+      "offsetXRatio": 0,
+      "offsetZRatio": 0,
+      "imagePlaneRotationDegrees": 0
+    }
+  ],
+  "trackingRevision": "0.3.17"
+}

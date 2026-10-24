@@ -2,8 +2,10 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.16',maximumImageGapMs=2000;
-    const imageOnly=new URLSearchParams(location.search).get('tracking')==='color-image';
+    const webRevision='0.3.17',maximumImageGapMs=2000;
+    const query=new URLSearchParams(location.search);
+    const imageOnly=query.get('tracking')==='color-image';
+    const targetMode=query.get('target')==='paper'?'paper':'frame';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
     const frame=new Float32Array(39),legacyFrame=frame.subarray(0,38),events=[],poseHistory=[],lifecycle=[];
@@ -32,6 +34,24 @@
     let xrGl=null,latestCameraFrame=null,manualRenderer=null,raf=0,nextTick=0,lastMode='',rawCamera=null,session=0;
     let startedAt=0,nextPoseSample=0,recognitionWaitAt=0,startTimer=0,gameReadyAt=0;
     let readyData=null,dataLoaded=false,dataAttempt=0;
+    let recoveryKind='',recoverySince=null;
+    function resetReacquisition(){recoveryKind='';recoverySince=null;}
+    function reacquisitionState(){
+      const clock=performance.now();
+      let kind='';
+      if(running&&placed){
+        if(!imageVisible)kind='searching';
+        else if(paperRotation.isBlocked())kind='paper-rotated';
+        else if(frame[2]<.5||clock-lastPoseAt>=350)kind='tracking-unavailable';
+      }
+      if(!kind){resetReacquisition();return{kind:'',message:'',detail:'',elapsedMs:0,canReread:false};}
+      if(recoverySince===null)recoverySince=kind==='searching'&&imageLostAt?imageLostAt:clock;
+      recoveryKind=kind;
+      const message=kind==='paper-rotated'?paperRotationHint():kind==='searching'?'用紙の枠全体を映してください':'位置を確認しています。端末をゆっくり動かしてください';
+      const detail=kind==='paper-rotated'?'元の向きで自動再開します。戻せない場合は読み直せます。':kind==='searching'?'明るさや映り込みを確認してください。用紙を見つけると自動で再開します。':'用紙を映したまま少し待ってください。戻らない場合は読み直せます。';
+      const elapsedMs=Math.max(0,clock-recoverySince);
+      return{kind:recoveryKind,message,detail,elapsedMs,canReread:elapsedMs>=5000};
+    }
     const tracking={source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
       rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0};
     const finite=value=>typeof value==='number'&&Number.isFinite(value);
@@ -41,7 +61,7 @@
         const finish=e=>{clearTimeout(timer);img.onload=img.onerror=null;if(e)reject(e);else resolve();};
         const timer=setTimeout(()=>finish(Error('認識用の画像の読み込みが時間内に完了しませんでした。')),15000);
         img.onload=()=>{
-          if(img.naturalWidth!==480||img.naturalHeight!==640){finish(Error('用紙0.3.6の認識画像一式を公開してください。'));return;}
+          if(img.naturalWidth!==480||img.naturalHeight!==640){finish(Error('認識画像の構成が一致しません。同じ更新フォルダーの中身を公開してください。'));return;}
           record('target-image-ready',{name:target.name,width:img.naturalWidth,height:img.naturalHeight});finish();
         };
         img.onerror=()=>finish(Error('認識用の画像を取得できません。paper/image-targetsを確認してください。'));
@@ -59,7 +79,8 @@
       if(readyData)return readyData;
       const attempt=++dataAttempt;
       readyData=(async()=>{
-        const paper=await fetchJson('paper/stage-layout.json?v='+webRevision);
+        const layoutFile=targetMode==='frame'?'paper/stage-layout-frame-0.3.17.json':'paper/stage-layout.json';
+        const paper=await fetchJson(layoutFile+'?v='+webRevision);
         if(!Array.isArray(paper.targets)||!paper.targets.length)throw Error('用紙の認識設定がありません。');
         const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+webRevision)));
         for(const target of data){const url=new URL(target.imagePath,location.href);url.searchParams.set('v',webRevision);url.searchParams.set('attempt',String(attempt));target.imagePath=url.href;}
@@ -84,8 +105,9 @@
     document.getElementById('diagnostics').before(sizeRow);
     const sizeInput=document.getElementById('color-width');
     document.querySelector('.eyebrow').textContent='Roll-by-Blow · '+webRevision+' · '+(imageOnly?'用紙だけの比較':'カラー枠');
-    ui.dimensions.textContent='新しい用紙0.3.6を認識して自動配置します';
-    ui.guidance.textContent=imageOnly?'新しい用紙の枠全体を映してください。比較用のため用紙の認識を失うと止まります。':'新しい用紙の枠全体を映してください。見失った後は最大2秒補い、戻らなければ一時停止します。';
+    ui.dimensions.textContent=targetMode==='frame'?'カラー枠の中の模様で自動配置します':'用紙全体の認識・比較用';
+    const viewInstruction=targetMode==='frame'?'カラー枠と中の模様':'余白も含めた用紙全体';
+    ui.guidance.textContent=viewInstruction+'を映してください。'+(imageOnly?'比較用のため認識を失うと止まります。':'見つかると自動で再開します。見失った後は最大2秒補います。');
     ui.place.hidden=true;ui.coaching.hidden=true;ui.reticle.hidden=true;
     ui.replace.textContent='用紙を読み直す';ui.recenter.hidden=true;
     function record(kind,detail){
@@ -141,7 +163,7 @@
     }
     function stop(){
       session++;clearTimeout(startTimer);startTimer=0;gameReadyAt=0;
-      running=false;starting=false;stopLoop();resetPaperRotation();
+      running=false;starting=false;stopLoop();resetPaperRotation();resetReacquisition();
       if(window.XR8&&added){try{XR8.stop();}catch(e){record('stop-error',String(e));}}
       destroyManualRenderer();frame.fill(0);anchor=null;imageVisible=false;imageLostAt=0;placed=false;lastPoseAt=0;
       visibleTargets.clear();targetAnchors.clear();
@@ -205,13 +227,14 @@
       if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
       samplePose(clock,valid?camera:null,pose,imageFresh);
       ui.phase.textContent=usable?'プレイ中':anchor?'一時停止':'認識中';
-      ui.status.textContent=rotationBlocked?paperRotationHint():usable&&imageVisible?'カラー用紙を基準に追跡しています。':'用紙の枠全体を映してください';
+      const recovery=reacquisitionState();
+      ui.status.textContent=recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':'用紙の枠全体を映してください');
       if(!anchor&&clock-recognitionWaitAt>25000){recognitionWaitAt=Infinity;deferFailure('用紙を認識できませんでした。枠全体と明るさを確認して、もう一度開始してください。');}
     }
     function addModules(){
       XR8.XrController.configure({disableWorldTracking:imageOnly,enableLighting:false,enableWorldPoints:false,
         leftHandedAxes:false,mirroredDisplay:false,scale:'responsive',imageTargetData:targets});
-      record('tracking-settings',{webRevision,imageOnly,targetNames:targets.map(t=>t.name),targetCount:targets.length,arTargetFps:30,maximumImageGapMs});
+      record('tracking-settings',{webRevision,imageOnly,targetMode,targetNames:targets.map(t=>t.name),targetCount:targets.length,arTargetFps:30,maximumImageGapMs});
       if(added)return;
       XR8.addCameraPipelineModules([XR8.GlTextureRenderer.pipelineModule(),XR8.XrController.pipelineModule(),{
         name:'roll-color-image-world',
@@ -246,7 +269,7 @@
     }
     async function start(){
       if(starting||running||!unity||!config||!engineReady)return;
-      resetPaperRotation();starting=true;error='';ui.start.disabled=true;ui.status.textContent='カメラとモーションの利用を確認しています。';if(window.RollStartup)RollStartup.clear();const token=++session;
+      resetPaperRotation();resetReacquisition();starting=true;error='';ui.start.disabled=true;ui.status.textContent='カメラとモーションの利用を確認しています。';if(window.RollStartup)RollStartup.clear();const token=++session;
       try{
         if(!isSecureContext||!navigator.mediaDevices)throw Error('HTTPSのSafariで開いてください。');
         const width=Number(sizeInput.value)/100;if(!finite(width)||width<.05||width>.6)throw Error('カラー枠の実測した外幅を5〜60cmで入力してください。');
@@ -268,17 +291,21 @@
     }
     ui.start.addEventListener('click',start);
     ui.stop.addEventListener('click',()=>{stop();ui.status.textContent='終了しました。';});
-    for(const button of [ui.replace,ui.recenter])button.addEventListener('click',()=>{
-      resetPaperRotation();anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();placed=false;frame[2]=frame[35]=0;send('ClearPlacement');
+    function rereadPaper(){
+      if(!running||starting)return;
+      if(window.RollCaptureBridge)RollCaptureBridge.suspend();
+      resetPaperRotation();resetReacquisition();anchor=null;imageVisible=false;imageLostAt=0;
+      visibleTargets.clear();targetAnchors.clear();placed=false;frame[2]=frame[35]=0;send('ClearPlacement');
       recognitionWaitAt=performance.now();
       record('clear-image-anchor',null);
-    });
+    }
+    for(const button of [ui.replace,ui.recenter])button.addEventListener('click',rereadPaper);
     ui.download.addEventListener('click',()=>{
-      const data={prototype:'ARRollCapture-'+webRevision+'-color',webRevision,imageOnly,maximumImageGapMs,savedAt:new Date().toISOString(),page:location.href,userAgent:navigator.userAgent,
+      const data={prototype:'ARRollCapture-'+webRevision+'-color',webRevision,imageOnly,targetMode,maximumImageGapMs,savedAt:new Date().toISOString(),page:location.href,userAgent:navigator.userAgent,
         phase:state.phase,error,config,layout,tracking:{...tracking,imageVisible,lastImageAgeMs:anchor?performance.now()-lastAnchorAt:null,
           lastImageLostAgeMs:anchor&&!imageVisible&&imageLostAt?performance.now()-imageLostAt:null},
         anchor,rawCamera:rawCamera?{position:rawCamera.position,rotation:rawCamera.rotation}:null,frame:Array.from(frame),unity:unityReport,
-        paperRotation:paperRotation.snapshot(),startup:window.RollStartup?RollStartup.snapshot():null,game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
+        reacquisition:reacquisitionState(),paperRotation:paperRotation.snapshot(),startup:window.RollStartup?RollStartup.snapshot():null,game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
       const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='roll-by-blow-color-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
     });
@@ -416,7 +443,7 @@
       gameCommand:method=>{if(method==='RequestReset'||method==='ResetBall')send('RequestReset');},
       gameIsActive:()=>running&&placed&&frame[2]>.5&&performance.now()-lastPoseAt<350,
       paperNeedsView:()=>running&&!imageVisible,
-      paperRotationHint,
+      paperRotationHint,reacquisitionState,rereadPaper,
       trackingHint:()=> '用紙の枠全体を映してください'
     };
   };

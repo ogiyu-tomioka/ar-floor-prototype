@@ -2,7 +2,9 @@
   'use strict';
   const panel = document.createElement('section');
   panel.id = 'roll-controls'; panel.hidden = true;
-  panel.innerHTML = `<p id="roll-notice" role="status">端末の背面から風を出そう</p>
+  panel.innerHTML = `<div id="roll-guidance"><p id="roll-notice" role="status">端末の背面から風を出そう</p>
+      <div id="roll-reacquire" hidden><p id="roll-reacquire-help"></p><button id="roll-reacquire-button">用紙を読み直す</button></div>
+    </div>
     <button id="roll-reset" aria-label="球と未捕獲モンスターを初期位置に戻す"><span>復帰</span><small id="roll-reset-time" hidden></small></button>
     <nav class="roll-toolbar" aria-label="ゲーム操作">
       <button id="roll-collection">図鑑</button><button id="roll-tools">AR操作</button>
@@ -40,8 +42,7 @@
           <path d="M54 15L42 3M64 12L58 0M76 14L78 2"/>
         </g>
       </svg>
-      <img class="blower-held" src="icons/blower-held.svg?v=0.3.16" alt="" width="180" height="150">
-      <span class="roll-camera-hint">背面から中央へ送風</span>
+      <img class="blower-held" src="icons/blower-held.svg?v=0.3.17" alt="" width="180" height="150">
     </div>
     <button id="roll-blow" aria-label="押している間だけ風を出す" aria-pressed="false"><span class="roll-blow-hint">長押しで</span><strong>風を出す</strong></button>`;
   document.body.appendChild(panel);
@@ -53,6 +54,8 @@
   const button = document.getElementById('roll-blow');
   const note = document.getElementById('roll-notice');
   const resetButton = document.getElementById('roll-reset');
+  const reacquire = document.getElementById('roll-reacquire');
+  const reacquireHelp = document.getElementById('roll-reacquire-help');
   const resetTime = document.getElementById('roll-reset-time');
   const markerLayer = document.getElementById('roll-monster-markers');
   const markerNodes = new Map();
@@ -62,7 +65,7 @@
   const versionNote = document.getElementById('roll-version');
   let pointer = null, blowing = false, tools = false, latest = null, lastCollectionJson = '';
   let collection = {version:1,entries:[]};
-  let lastCaptureSequence = 0, catchTimer = 0;
+  let lastCaptureSequence = null, catchTimer = 0;
   function showCapture(name) {
     document.getElementById('roll-catch-name').textContent = name === 'Mini Creature' ? '仮モンスターをゲット' : name ? name + 'をゲット' : 'ゲットしました';
     catchToast.hidden = false;
@@ -130,6 +133,10 @@
   document.getElementById('roll-reset').addEventListener('click', function () {
     reset(); FloorProbeBridge.gameCommand('RequestReset');
   });
+  document.getElementById('roll-reacquire-button').addEventListener('click', function () {
+    reset();
+    if (window.FloorProbeBridge && FloorProbeBridge.rereadPaper) FloorProbeBridge.rereadPaper();
+  });
   document.getElementById('roll-tools').addEventListener('click', function () {
     reset(); tools = !tools; document.body.classList.toggle('roll-tools-open', tools);
     this.textContent = tools ? '戻る' : 'AR操作';
@@ -186,20 +193,21 @@
         return;
       }
       if (value.message === 'recovered' && (!latest || latest.message !== 'recovered')) reset();
+      const sequence = Number.isInteger(value.captureSequence) && value.captureSequence >= 0 ? value.captureSequence : null;
+      const newlyCaught = sequence !== null && lastCaptureSequence !== null && sequence > lastCaptureSequence;
+      // Consume the event counter even while unplaced; rereading must not replay an old catch.
+      if (sequence !== null) lastCaptureSequence = sequence;
       latest = value;
       panel.hidden = !value.placed;
       document.body.classList.toggle('roll-playing', !!value.placed);
       if (!value.placed) {
-        catchToast.hidden = true; lastCaptureSequence = 0;
+        catchToast.hidden = true; clearTimeout(catchTimer); reacquire.hidden = true;
         reset(); tools = false; document.body.classList.remove('roll-tools-open');
         document.getElementById('roll-tools').textContent = 'AR操作';
         if (dialog.open) dialog.close();
       }
       if (!value.tracking) { reset(); hideMonsterMarkers(); }
-      if (value.placed && Number.isInteger(value.captureSequence) && value.captureSequence > 0
-          && value.captureSequence !== lastCaptureSequence) {
-        lastCaptureSequence = value.captureSequence; showCapture(value.lastCaughtName);
-      }
+      if (value.placed && newlyCaught) showCapture(value.lastCaughtName);
       button.disabled = paused();
       const resetSeconds = Math.max(0, Math.ceil(Number(value.resetCooldownRemaining) || 0));
       resetButton.disabled = paused() || resetSeconds > 0;
@@ -216,18 +224,21 @@
       if (versionNote) {
         let arVersion = '—';
         try { arVersion = JSON.parse(document.getElementById('metrics').textContent).webRevision || '従来モード'; } catch (_) {}
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.16';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.17';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
       const rotationHint = window.FloorProbeBridge && FloorProbeBridge.paperRotationHint ? FloorProbeBridge.paperRotationHint() : '';
-      const nextNotice = rotationHint ? rotationHint : !value.tracking || needsPaper ? '用紙の枠全体を映してください'
+      const recovery = window.FloorProbeBridge && FloorProbeBridge.reacquisitionState ? FloorProbeBridge.reacquisitionState() : null;
+      reacquire.hidden = !value.placed || !recovery || !recovery.canReread;
+      if (recovery && reacquireHelp.textContent !== recovery.detail) reacquireHelp.textContent = recovery.detail;
+      const nextNotice = recovery && recovery.message ? recovery.message : rotationHint ? rotationHint : !value.tracking || needsPaper ? '用紙の枠全体を映してください'
         : value.message === 'spawn-blocked' ? '出現場所を待っています。初期位置に戻せます'
-        : value.message === 'caught' ? '捕獲成功！'
-        : value.message === 'wind-guard' ? 'モンスターに直接風が当たった！ しばらく防御するよ'
+        : value.message === 'caught' && !catchToast.hidden ? '捕獲成功！'
+        : value.message === 'wind-guard' ? 'モンスターは風を嫌がっている'
         : value.message === 'recovered' ? '球と未捕獲のモンスターを初期位置に戻しました'
-        : value.message === 'guard' ? '防御された！ 青くないときを狙おう'
-        : value.guarding ? '青いモンスターは防御中。風は球へ当てよう'
+        : value.message === 'guard' ? 'モンスターは防御中だ'
+        : value.guarding ? 'モンスターは防御中だ'
         : value.blowing && value.windHorizontalStrength < .01 ? '真下付近では横へ押せません。少し傾けてみよう'
         : '端末の背面から風を出そう';
       if (note.textContent !== nextNotice) note.textContent = nextNotice;

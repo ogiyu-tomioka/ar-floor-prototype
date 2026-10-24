@@ -1,0 +1,33 @@
+{
+  "revision": "0.3.17",
+  "patternRevision": "0.3.6",
+  "regionMm": [
+    81,
+    15,
+    135,
+    180
+  ],
+  "frameMm": [
+    58.5,
+    15,
+    180,
+    180
+  ],
+  "pixelSize": [
+    480,
+    640
+  ],
+  "physicalSizeMeters": [
+    0.135,
+    0.18
+  ],
+  "imagePlaneRotationDegrees": 0,
+  "widthRatio": 0.75,
+  "oldAndCleanPaperFrameCropPixelIdentical": true,
+  "sourceSHA256": "9b825062832db1509a46a6e95911bc7c3041e3e613b208ea26addf64ca8180b2",
+  "targetSHA256": "c23b525c486a7d8f5be9765c7781f046f99d37273aee9eb6156f92cfa370dca1",
+  "officialTool": "8thwall image-target-cli applyCrop; existing local Sharp import adaptation",
+  "oldFullPaperLayout": "stage-layout.json",
+  "fallbackQuery": "target=paper",
+  "realSDKOrDeviceRun": false
+}

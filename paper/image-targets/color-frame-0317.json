@@ -1,0 +1,29 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 0,
+    "width": 1080,
+    "height": 1440,
+    "originalWidth": 1080,
+    "originalHeight": 1440,
+    "isRotated": false
+  },
+  "imagePath": "paper/image-targets/color-frame-0317_luminance.png",
+  "metadata": {
+    "printPatternRevision": "0.3.6",
+    "targetRevision": "0.3.17",
+    "physicalWidthMeters": 0.135,
+    "physicalHeightMeters": 0.18,
+    "imagePlaneRotationDegrees": 0
+  },
+  "name": "color-frame-0317",
+  "resources": {
+    "originalImage": "color-frame-0317_original.png",
+    "croppedImage": "color-frame-0317_cropped.png",
+    "thumbnailImage": "color-frame-0317_thumbnail.png",
+    "luminanceImage": "color-frame-0317_luminance.png"
+  },
+  "created": 1792847876356,
+  "updated": 1792847876356
+}
