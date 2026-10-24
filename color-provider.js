@@ -2,12 +2,19 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.17',maximumImageGapMs=2000;
+    const webRevision='0.3.18',maximumImageGapMs=2000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
+    const diagnostics=document.getElementById('diagnostics');
+    function setText(element,value){if(element.textContent!==value)element.textContent=value;}
+    function refreshMetrics(){
+      if(!unityReport)return;
+      setText(ui.metrics,JSON.stringify({webRevision,provider:imageOnly?'image-direct':'image-and-world',tracking,placed,fps:unityReport.fps},null,2));
+    }
+    diagnostics.addEventListener('toggle',()=>{if(diagnostics.open)refreshMetrics();});
     const frame=new Float32Array(39),legacyFrame=frame.subarray(0,38),events=[],poseHistory=[],lifecycle=[];
     const alphaContexts=new WeakSet(),unityAlpha={enabled:true,installed:false,clearCalls:0,alphaOnlyOpaqueClears:0,
       preventedClears:0,preventedDefaultClears:0,preventedOffscreenClears:0,preventedClearBufferCalls:0,error:''};
@@ -226,9 +233,9 @@
       }else{tracking.source=anchor?(!imageVisible&&lostAgeMs>maximumImageGapMs?'image-required':'tracking-unavailable'):'waiting-for-image';tracking.limitedFrames++;}
       if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
       samplePose(clock,valid?camera:null,pose,imageFresh);
-      ui.phase.textContent=usable?'プレイ中':anchor?'一時停止':'認識中';
+      setText(ui.phase,usable?'プレイ中':anchor?'一時停止':'認識中');
       const recovery=reacquisitionState();
-      ui.status.textContent=recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':'用紙の枠全体を映してください');
+      setText(ui.status,recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':'用紙の枠全体を映してください'));
       if(!anchor&&clock-recognitionWaitAt>25000){recognitionWaitAt=Infinity;deferFailure('用紙を認識できませんでした。枠全体と明るさを確認して、もう一度開始してください。');}
     }
     function addModules(){
@@ -421,6 +428,7 @@
     }
   }
     return {
+      webRevision,
       retryReady:()=>{error='';prepareData();},
       retryStart:()=>{stop();error='';if(!unity||!config||!engineReady){ready();if(window.RollStartup)RollStartup.fail('まだゲームの準備が完了していません。','Boot resources are not ready','boot');return;}dataAttempt++;dataLoaded=false;readyData=null;start();},
       stopForFailure:stop,
@@ -433,7 +441,7 @@
       readFrame:()=>{if(!running||performance.now()-lastPoseAt>350){frame[2]=frame[35]=0;}return config&&config.frameFloatCount===39?frame:legacyFrame;},
       report:value=>{
         unityReport=value;placed=!!value.placed;
-        ui.metrics.textContent=JSON.stringify({webRevision,provider:imageOnly?'image-direct':'image-and-world',tracking,placed,fps:value.fps},null,2);
+        if(diagnostics.open)refreshMetrics();
         if(running&&placed){
           const game=window.RollCaptureBridge?RollCaptureBridge.snapshot().report:null;
           if(!game){if(!gameReadyAt)gameReadyAt=performance.now();else if(performance.now()-gameReadyAt>8000){gameReadyAt=Infinity;deferFailure('ステージのゲームを開始できませんでした。もう一度開始してください。');}}
