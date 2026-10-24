@@ -39,7 +39,7 @@
       </svg>
       <div class="blower-held-motion"><div class="blower-held">
         <img class="blower-shell" src="icons/blower-held.svg?v=0.3.20" alt="" width="180" height="150">
-        <img class="blower-rotor" src="icons/blower-rotor.svg?v=0.3.19" alt="" width="60" height="60">
+        <img class="blower-rotor" src="icons/blower-rotor.png?v=0.3.22" alt="" width="60" height="60">
         <img class="blower-grille" src="icons/blower-grille.svg?v=0.3.19" alt="" width="180" height="150">
       </div></div>
     </div>
@@ -225,7 +225,7 @@
   window.RollCaptureBridge = {
     suspend: function () { reset(); hideMonsterMarkers(); },
     markers: updateMonsterMarkers,
-    snapshot: function () { return {report: latest, blowing: blowing, paused: paused(), effects: effectsMode}; },
+    snapshot: function () { return {report: latest, blowing: blowing, paused: paused(), effects: effectsMode, rotorFormat: 'png-180'}; },
     readControls: function () { if (paused()) { reset(); hideMonsterMarkers(); return [0,0,1]; } return [blowing?1:0,0,0]; },
     report: function (value) {
       if (value.gameplayRevision !== '0.3.13') {
@@ -267,7 +267,7 @@
       if (hasAim) shadeWindGuide(value, force);
       if (versionNote) {
         const arVersion = window.FloorProbeBridge && FloorProbeBridge.webRevision || '従来モード';
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.21';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.22';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
