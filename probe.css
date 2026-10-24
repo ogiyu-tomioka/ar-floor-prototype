@@ -210,3 +210,11 @@ body.roll-tools-open #roll-guidance { display: none; }
 /* Diagnostic comparison: suppress only wind artwork motion, never controls or physics. */
 body.roll-effects-off #roll-controls .roll-airflow { display: none; }
 body.roll-effects-off #roll-controls .wind-streak, body.roll-effects-off #roll-controls .blower-held-motion, body.roll-effects-off #roll-controls .blower-rotor { animation: none; will-change: auto; }
+
+/* Independent comparison within the same AR session. */
+body.roll-effects-fan #roll-controls .roll-airflow { display: none; }
+body.roll-effects-fan #roll-controls .wind-streak, body.roll-effects-air #roll-controls .blower-rotor { animation: none; will-change: auto; }
+.roll-effects-control { margin-top: 12px; display: grid; gap: 7px; }
+.roll-effects-control label { font-size: 14px; font-weight: 700; }
+.roll-effects-control select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid #8bb3a9; border-radius: 8px; background: #153b37; color: #eefaf2; font: inherit; font-size: 16px; }
+.roll-effects-control small { font-size: 12px; line-height: 1.5; color: #d0e6da; }

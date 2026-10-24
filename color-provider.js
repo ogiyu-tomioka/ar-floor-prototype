@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.20',maximumImageGapMs=2000;
+    const webRevision='0.3.21',maximumImageGapMs=2000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
@@ -43,29 +43,37 @@
     let readyData=null,dataLoaded=false,dataAttempt=0;
     let recoveryKind='',recoverySince=null;
     const performanceHistory=[];
-    let performancePhase=null,performanceChangedAt=0,performanceClock=0,performanceFrame=0;
-    function resetPerformance(){performanceHistory.length=0;performancePhase=null;performanceChangedAt=performanceClock=performanceFrame=0;}
+    let performancePhase=null,performanceEffects='unknown',performanceChangedAt=0,performanceClock=0,performanceFrame=0;
+    function resetPerformance(){performanceHistory.length=0;performancePhase=null;performanceEffects='unknown';performanceChangedAt=performanceClock=performanceFrame=0;}
     function samplePerformance(value,gameState){
       if(!running)return;
       const clock=performance.now(),blowing=!!(gameState&&gameState.blowing);
-      if(performancePhase!==blowing){performancePhase=blowing;performanceChangedAt=clock;}
+      const effects=gameState&&gameState.effects||'unknown';
+      if(performancePhase!==blowing||performanceEffects!==effects){performancePhase=blowing;performanceEffects=effects;performanceChangedAt=clock;}
       const elapsed=clock-performanceClock;
       const arFps=performanceClock>0&&elapsed>0&&elapsed<=1500&&frame[0]>=performanceFrame?(frame[0]-performanceFrame)*1000/elapsed:null;
-      performanceHistory.push({elapsedMs:Math.round(clock-startedAt),blowing,effects:gameState&&gameState.effects||'unknown',
+      performanceHistory.push({elapsedMs:Math.round(clock-startedAt),blowing,effects,
         settled:clock-performanceChangedAt>=700&&frame[2]>.5&&!!gameState&&!gameState.paused,
         unityFps:finite(value.fps)&&value.fps>0?value.fps:null,arFps});
       if(performanceHistory.length>120)performanceHistory.shift();
       performanceClock=clock;performanceFrame=frame[0];
     }
-    function performanceSnapshot(){
+    function performancePhaseSummary(effects){
       const phases={};
       for(const name of ['idle','blowing']){
-        const samples=performanceHistory.filter(s=>s.settled&&s.blowing===(name==='blowing'));
+        const samples=performanceHistory.filter(s=>s.settled&&s.effects===effects&&s.blowing===(name==='blowing'));
         const unity=samples.map(s=>s.unityFps).filter(finite),ar=samples.map(s=>s.arFps).filter(finite);
         phases[name]={samples:samples.length,unityFpsMean:unity.length?unity.reduce((a,b)=>a+b,0)/unity.length:null,
           unityFpsMin:unity.length?Math.min(...unity):null,arFpsMean:ar.length?ar.reduce((a,b)=>a+b,0)/ar.length:null};
       }
-      return{source:'existing-half-second-unity-reports-and-ar-update-counter',phaseSettlingMs:700,phases,samples:performanceHistory.slice()};
+      return phases;
+    }
+    function performanceSnapshot(){
+      const byEffects={};
+      for(const name of ['all','fan','air','off'])byEffects[name]=performancePhaseSummary(name);
+      return{source:'existing-half-second-unity-reports-and-ar-update-counter',phaseSettlingMs:700,
+        effects:performanceEffects,phases:byEffects[performanceEffects]||performancePhaseSummary(performanceEffects),
+        byEffects,samples:performanceHistory.slice()};
     }
     function resetReacquisition(){recoveryKind='';recoverySince=null;}
     function reacquisitionState(){
