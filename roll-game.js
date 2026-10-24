@@ -9,10 +9,16 @@
     </nav>
     <div id="roll-monster-markers" aria-label="モンスターの状態"></div>
     <div class="roll-aim" aria-hidden="true"><span class="roll-aim-dot"></span></div>
-    <svg class="roll-airflow" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-      <g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
-        <path d="M12 82L38 60"/><path d="M88 82L62 60"/>
-        <path d="M15 18L38 40"/><path d="M85 18L62 40"/>
+    <svg class="roll-airflow" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width=".3" stroke-linecap="round">
+        <path pathLength="100" style="--wind-delay:0s" d="M-4 18L46 47"/>
+        <path pathLength="100" style="--wind-delay:-.48s" d="M104 18L54 47"/>
+        <path pathLength="100" style="--wind-delay:-.12s" d="M-4 39L46 49"/>
+        <path pathLength="100" style="--wind-delay:-.60s" d="M104 39L54 49"/>
+        <path pathLength="100" style="--wind-delay:-.24s" d="M-4 65L46 51"/>
+        <path pathLength="100" style="--wind-delay:-.72s" d="M104 65L54 51"/>
+        <path pathLength="100" style="--wind-delay:-.36s" d="M-4 88L46 53"/>
+        <path pathLength="100" style="--wind-delay:-.84s" d="M104 88L54 53"/>
       </g>
     </svg>
     <section id="roll-catch-toast" role="status" aria-live="polite" hidden>
@@ -20,7 +26,7 @@
       <strong>捕獲成功！</strong><span id="roll-catch-name"></span>
     </section>
     <div class="roll-blower" aria-hidden="true">
-      <svg viewBox="0 0 180 150" focusable="false">
+      <svg class="blower-idle" viewBox="0 0 180 150" focusable="false">
         <path d="M112 112L141 104L172 135L153 150L124 140Z" fill="#526f73" stroke="#142e35" stroke-width="3"/>
         <path d="M101 96L126 87L144 123L122 135Z" fill="#19333b" stroke="#9cc7c6" stroke-width="2"/>
         <path d="M125 112C113 106 107 116 115 126L131 139L152 123L139 108C133 102 126 106 125 112Z" fill="#a3b6af" stroke="#304e52" stroke-width="3"/>
@@ -34,6 +40,7 @@
           <path d="M54 15L42 3M64 12L58 0M76 14L78 2"/>
         </g>
       </svg>
+      <img class="blower-held" src="icons/blower-held.svg?v=0.3.16" alt="" width="180" height="150">
       <span class="roll-camera-hint">背面から中央へ送風</span>
     </div>
     <button id="roll-blow" aria-label="押している間だけ風を出す" aria-pressed="false"><span class="roll-blow-hint">長押しで</span><strong>風を出す</strong></button>`;
@@ -209,11 +216,12 @@
       if (versionNote) {
         let arVersion = '—';
         try { arVersion = JSON.parse(document.getElementById('metrics').textContent).webRevision || '従来モード'; } catch (_) {}
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.14';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.16';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
-      const nextNotice = !value.tracking || needsPaper ? '用紙の枠全体を映してください'
+      const rotationHint = window.FloorProbeBridge && FloorProbeBridge.paperRotationHint ? FloorProbeBridge.paperRotationHint() : '';
+      const nextNotice = rotationHint ? rotationHint : !value.tracking || needsPaper ? '用紙の枠全体を映してください'
         : value.message === 'spawn-blocked' ? '出現場所を待っています。初期位置に戻せます'
         : value.message === 'caught' ? '捕獲成功！'
         : value.message === 'wind-guard' ? 'モンスターに直接風が当たった！ しばらく防御するよ'
