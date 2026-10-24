@@ -1,8 +1,6 @@
 (function () {
   'use strict';
-  const effectModes = ['all', 'fan', 'air', 'off'];
-  const requestedEffects = new URLSearchParams(location.search).get('windfx');
-  let effectsMode = effectModes.includes(requestedEffects) ? requestedEffects : 'all';
+  const effectsMode = 'air';
   const panel = document.createElement('section');
   panel.id = 'roll-controls'; panel.hidden = true;
   panel.innerHTML = `<div id="roll-guidance"><p id="roll-notice" role="status">端末の背面から風を出そう</p>
@@ -62,27 +60,6 @@
   const aim = document.querySelector('.roll-aim');
   const catchToast = document.getElementById('roll-catch-toast');
   const versionNote = document.getElementById('roll-version');
-  const effectsControl = document.createElement('div');
-  effectsControl.className = 'roll-effects-control';
-  effectsControl.innerHTML = '<label for="roll-effects-mode">送風演出の比較</label><select id="roll-effects-mode">'
-    + '<option value="all">羽根＋風の筋（通常）</option><option value="fan">羽根だけ</option>'
-    + '<option value="air">風の筋だけ</option><option value="off">演出なし</option></select>'
-    + '<small>切り替えても風の力は変わりません。</small>';
-  document.getElementById('metrics').before(effectsControl);
-  const effectsSelect = document.getElementById('roll-effects-mode');
-  effectsSelect.value = effectsMode;
-  function applyEffectsMode() {
-    setClass(document.body, 'roll-effects-off', effectsMode === 'off');
-    setClass(document.body, 'roll-effects-fan', effectsMode === 'fan');
-    setClass(document.body, 'roll-effects-air', effectsMode === 'air');
-  }
-  applyEffectsMode();
-  effectsSelect.addEventListener('change', function () {
-    reset();
-    effectsMode = effectModes.includes(this.value) ? this.value : 'all';
-    this.value = effectsMode;
-    applyEffectsMode();
-  });
   let pointer = null, blowing = false, tools = false, latest = null, lastCollectionJson = '';
   let collection = {version:1,entries:[]};
   let lastCaptureSequence = null, catchTimer = 0;
@@ -225,7 +202,7 @@
   window.RollCaptureBridge = {
     suspend: function () { reset(); hideMonsterMarkers(); },
     markers: updateMonsterMarkers,
-    snapshot: function () { return {report: latest, blowing: blowing, paused: paused(), effects: effectsMode, rotorFormat: 'png-180'}; },
+    snapshot: function () { return {report: latest, blowing: blowing, paused: paused(), effects: effectsMode, rotorFormat: 'png-180', rotorAnimated: false}; },
     readControls: function () { if (paused()) { reset(); hideMonsterMarkers(); return [0,0,1]; } return [blowing?1:0,0,0]; },
     report: function (value) {
       if (value.gameplayRevision !== '0.3.13') {
@@ -267,7 +244,7 @@
       if (hasAim) shadeWindGuide(value, force);
       if (versionNote) {
         const arVersion = window.FloorProbeBridge && FloorProbeBridge.webRevision || '従来モード';
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.22';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.23';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();

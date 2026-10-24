@@ -181,20 +181,17 @@ body.roll-tools-open .roll-blower { display: none; }
 /* Keep the lower edge free for controls; center the blower only while held. */
 .is-blowing .roll-blower { left: 50%; right: auto; transform: translateX(-50%); }
 
-/* The container stays centered; recoil and vibration affect only the held artwork. */
+/* Held artwork stays still; blowing animates the wind streaks only. */
 .blower-held-motion { display: none; width: 100%; height: 100%; transform-origin: 50% 85%; }
 .roll-blower .blower-held { display: block; position: relative; flex: none; width: auto; height: 100%; aspect-ratio: 6 / 5; transform-origin: 50% 85%; }
 .blower-shell, .blower-grille { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 .blower-shell { z-index: 0; }
-.blower-rotor { display: block; position: absolute; left: 35%; top: 25.333333%; width: 30%; height: 36%; z-index: 1; transform-origin: 50% 50%; }
+.blower-rotor { display: block; position: absolute; left: 35%; top: 25.333333%; width: 30%; height: 36%; z-index: 1; animation: none; will-change: auto; }
 .blower-grille { z-index: 2; }
 .is-blowing .roll-blower { width: 170px; height: 132px; }
 .is-blowing .roll-blower .blower-idle { display: none; }
 .is-blowing .blower-held-motion { display: flex; align-items: center; justify-content: center; }
-.is-blowing .blower-rotor { animation: blower-spin .85s linear infinite; will-change: transform; }
-@keyframes blower-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @media (max-height: 600px) { .is-blowing .roll-blower { width: 134px; height: 103px; } }
-@media (prefers-reduced-motion: reduce) { .is-blowing .blower-held-motion, .is-blowing .blower-rotor { animation: none; will-change: auto; } }
 
 /* In-context recovery after five seconds; normal play keeps the single compact notice. */
 #roll-guidance { position: absolute; top: calc(64px + env(safe-area-inset-top)); left: 14px; right: 14px; max-width: 520px; margin: 0 auto; z-index: 3; }
@@ -206,15 +203,3 @@ body.roll-tools-open #roll-guidance { display: none; }
 .roll-blower { height: 118px; }
 .is-blowing .roll-blower { height: 132px; }
 @media (max-height: 600px) { .roll-blower { height: 92px; } .is-blowing .roll-blower { height: 103px; } }
-
-/* Diagnostic comparison: suppress only wind artwork motion, never controls or physics. */
-body.roll-effects-off #roll-controls .roll-airflow { display: none; }
-body.roll-effects-off #roll-controls .wind-streak, body.roll-effects-off #roll-controls .blower-held-motion, body.roll-effects-off #roll-controls .blower-rotor { animation: none; will-change: auto; }
-
-/* Independent comparison within the same AR session. */
-body.roll-effects-fan #roll-controls .roll-airflow { display: none; }
-body.roll-effects-fan #roll-controls .wind-streak, body.roll-effects-air #roll-controls .blower-rotor { animation: none; will-change: auto; }
-.roll-effects-control { margin-top: 12px; display: grid; gap: 7px; }
-.roll-effects-control label { font-size: 14px; font-weight: 700; }
-.roll-effects-control select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid #8bb3a9; border-radius: 8px; background: #153b37; color: #eefaf2; font: inherit; font-size: 16px; }
-.roll-effects-control small { font-size: 12px; line-height: 1.5; color: #d0e6da; }
