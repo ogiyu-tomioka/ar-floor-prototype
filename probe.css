@@ -183,15 +183,21 @@ body.roll-tools-open .roll-blower { display: none; }
 
 /* The container stays centered; recoil and vibration affect only the held artwork. */
 .blower-held-motion { display: none; width: 100%; height: 100%; transform-origin: 50% 85%; }
-.roll-blower .blower-held { display: block; width: 100%; height: 100%; object-fit: contain; transform-origin: 50% 85%; }
+.roll-blower .blower-held { display: block; position: relative; flex: none; width: auto; height: 100%; aspect-ratio: 6 / 5; transform-origin: 50% 85%; }
+.blower-shell, .blower-grille { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+.blower-shell { z-index: 0; }
+.blower-rotor { display: block; position: absolute; left: 35%; top: 25.333333%; width: 30%; height: 36%; z-index: 1; transform-origin: 50% 50%; }
+.blower-grille { z-index: 2; }
 .is-blowing .roll-blower { width: 170px; height: 132px; }
 .is-blowing .roll-blower .blower-idle { display: none; }
-.is-blowing .blower-held-motion { display: block; animation: blower-kick .22s ease-out both; }
+.is-blowing .blower-held-motion { display: flex; align-items: center; justify-content: center; animation: blower-kick .22s ease-out both; }
 .is-blowing .blower-held { animation: blower-hum .32s steps(4, end) infinite; }
+.is-blowing .blower-rotor { animation: blower-spin .85s linear infinite; will-change: transform; }
+@keyframes blower-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes blower-kick { 0%, 100% { transform: translateY(0) scale(1); } 40% { transform: translateY(3px) scale(1.025); } }
 @keyframes blower-hum { 0%, 100% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(-.7px, .5px) rotate(-.35deg); } 75% { transform: translate(.7px, -.5px) rotate(.35deg); } }
 @media (max-height: 600px) { .is-blowing .roll-blower { width: 134px; height: 103px; } }
-@media (prefers-reduced-motion: reduce) { .is-blowing .blower-held-motion, .is-blowing .blower-held { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .is-blowing .blower-held-motion, .is-blowing .blower-held, .is-blowing .blower-rotor { animation: none; will-change: auto; } }
 
 /* In-context recovery after five seconds; normal play keeps the single compact notice. */
 #roll-guidance { position: absolute; top: calc(64px + env(safe-area-inset-top)); left: 14px; right: 14px; max-width: 520px; margin: 0 auto; z-index: 3; }

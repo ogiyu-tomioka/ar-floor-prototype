@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 150" role="img" aria-labelledby="title desc">
   <title id="title">画面の奥へ向けたブロアーの背面</title>
-  <desc id="desc">筒の軸を画面に垂直にし、手前にある吸気グリルと握り手を描く。奥のノズルは本体に隠れている。</desc>
+  <desc id="desc">筒の軸を画面に垂直にし、握り手と吸気口の本体を描く。格子と羽根は別の層で重ねる。奥のノズルは本体に隠れている。</desc>
   <g stroke="#16333b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <path d="M77 98H101L106 135L98 146H81L75 135Z" fill="#31535e"/>
     <path d="M80 111H101M80 120H102M80 129H103" fill="none" stroke="#729a9a" stroke-width="2.5"/>
@@ -9,11 +9,6 @@
     <path d="M57 52Q64 30 87 29" fill="none" stroke="#bddfd0" stroke-width="4"/>
     <path d="M121 52Q128 76 111 92" fill="none" stroke="#284c58" stroke-width="4"/>
     <circle cx="90" cy="65" r="30" fill="#18343e" stroke="#a2cec4" stroke-width="2.5"/>
-    <g fill="none" stroke="#719a9d" stroke-width="3">
-      <path d="M78 43H102M70 51H110M66 59H114M66 67H114M69 75H111M75 83H105"/>
-      <path d="M82 39V88M98 39V88" stroke="#436773" stroke-width="2"/>
-    </g>
-    <circle cx="90" cy="65" r="5" fill="#426d77" stroke="#17343d" stroke-width="1.5"/>
     <circle cx="64" cy="39" r="2" fill="#254651" stroke="none"/>
     <circle cx="116" cy="39" r="2" fill="#254651" stroke="none"/>
     <circle cx="64" cy="91" r="2" fill="#254651" stroke="none"/>

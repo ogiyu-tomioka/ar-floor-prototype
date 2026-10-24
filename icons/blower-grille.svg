@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 150">
+  <title>ブロアーの固定された吸気グリル</title>
+    <g fill="none" stroke="#719a9d" stroke-width="3">
+      <path d="M78 43H102M70 51H110M66 59H114M66 67H114M69 75H111M75 83H105"/>
+      <path d="M82 39V88M98 39V88" stroke="#436773" stroke-width="2"/>
+    </g>
+    <circle cx="90" cy="65" r="5" fill="#426d77" stroke="#17343d" stroke-width="1.5"/>
+</svg>

@@ -40,7 +40,11 @@
           <path d="M54 15L42 3M64 12L58 0M76 14L78 2"/>
         </g>
       </svg>
-      <div class="blower-held-motion"><img class="blower-held" src="icons/blower-held.svg?v=0.3.17" alt="" width="180" height="150"></div>
+      <div class="blower-held-motion"><div class="blower-held">
+        <img class="blower-shell" src="icons/blower-held.svg?v=0.3.19" alt="" width="180" height="150">
+        <img class="blower-rotor" src="icons/blower-rotor.svg?v=0.3.19" alt="" width="60" height="60">
+        <img class="blower-grille" src="icons/blower-grille.svg?v=0.3.19" alt="" width="180" height="150">
+      </div></div>
     </div>
     <button id="roll-blow" aria-label="押している間だけ風を出す" aria-pressed="false"><span class="roll-blow-hint">長押しで</span><strong>風を出す</strong></button>`;
   document.body.appendChild(panel);
@@ -65,7 +69,7 @@
   let collection = {version:1,entries:[]};
   let lastCaptureSequence = null, catchTimer = 0;
   function showCapture(name) {
-    document.getElementById('roll-catch-name').textContent = name === 'Mini Creature' ? '仮モンスターをゲット' : name ? name + 'をゲット' : 'ゲットしました';
+    document.getElementById('roll-catch-name').textContent = name === 'Mini Creature' ? 'モンスターをゲットした！' : name ? name + 'をゲットした！' : 'モンスターをゲットした！';
     catchToast.hidden = false;
     clearTimeout(catchTimer);
     catchTimer = setTimeout(function () { catchToast.hidden = true; }, 1700);
@@ -245,7 +249,7 @@
       if (hasAim) shadeWindGuide(value, force);
       if (versionNote) {
         const arVersion = window.FloorProbeBridge && FloorProbeBridge.webRevision || '従来モード';
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.18';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.19';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
