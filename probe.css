@@ -103,8 +103,8 @@ body.roll-recovery-open #roll-controls { visibility: hidden; }
 .roll-aim-dot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; border-radius: 50%; background: #e5fff4bb; transform: translate(-50%, -50%); }
 .roll-airflow { display: none; position: absolute; inset: 0; width: 100%; height: 100%; color: #e6fff7; pointer-events: none; overflow: hidden; clip-path: inset(calc(58px + env(safe-area-inset-top)) 0 calc(104px + env(safe-area-inset-bottom))); }
 .wind-lane { position: absolute; height: 0; transform-origin: 0 0; }
-.wind-streak { display: block; position: absolute; left: 0; top: -.75px; width: var(--wind-streak-width, 24px); height: 1.5px; border-radius: 2px; background: currentColor; }
-.is-blowing.has-wind-aim .roll-airflow { display: block; opacity: .58; }
+.wind-streak { display: block; position: absolute; left: 0; top: -.75px; width: var(--wind-streak-width, 24px); height: 1.5px; border-radius: 2px; background: rgba(230, 255, 247, .58); }
+.is-blowing.has-wind-aim .roll-airflow { display: block; }
 .is-blowing.has-wind-aim .wind-streak { animation: wind-inward 1.2s steps(20, end) infinite; animation-delay: var(--wind-delay, 0s); will-change: transform, opacity; }
 .roll-blower { bottom: calc(80px + env(safe-area-inset-bottom)); height: 139px; }
 .roll-blower svg { height: 118px; }
@@ -190,14 +190,11 @@ body.roll-tools-open .roll-blower { display: none; }
 .blower-grille { z-index: 2; }
 .is-blowing .roll-blower { width: 170px; height: 132px; }
 .is-blowing .roll-blower .blower-idle { display: none; }
-.is-blowing .blower-held-motion { display: flex; align-items: center; justify-content: center; animation: blower-kick .22s ease-out both; }
-.is-blowing .blower-held { animation: blower-hum .32s steps(4, end) infinite; }
+.is-blowing .blower-held-motion { display: flex; align-items: center; justify-content: center; }
 .is-blowing .blower-rotor { animation: blower-spin .85s linear infinite; will-change: transform; }
 @keyframes blower-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes blower-kick { 0%, 100% { transform: translateY(0) scale(1); } 40% { transform: translateY(3px) scale(1.025); } }
-@keyframes blower-hum { 0%, 100% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(-.7px, .5px) rotate(-.35deg); } 75% { transform: translate(.7px, -.5px) rotate(.35deg); } }
 @media (max-height: 600px) { .is-blowing .roll-blower { width: 134px; height: 103px; } }
-@media (prefers-reduced-motion: reduce) { .is-blowing .blower-held-motion, .is-blowing .blower-held, .is-blowing .blower-rotor { animation: none; will-change: auto; } }
+@media (prefers-reduced-motion: reduce) { .is-blowing .blower-held-motion, .is-blowing .blower-rotor { animation: none; will-change: auto; } }
 
 /* In-context recovery after five seconds; normal play keeps the single compact notice. */
 #roll-guidance { position: absolute; top: calc(64px + env(safe-area-inset-top)); left: 14px; right: 14px; max-width: 520px; margin: 0 auto; z-index: 3; }
@@ -209,3 +206,7 @@ body.roll-tools-open #roll-guidance { display: none; }
 .roll-blower { height: 118px; }
 .is-blowing .roll-blower { height: 132px; }
 @media (max-height: 600px) { .roll-blower { height: 92px; } .is-blowing .roll-blower { height: 103px; } }
+
+/* Diagnostic comparison: suppress only wind artwork motion, never controls or physics. */
+body.roll-effects-off #roll-controls .roll-airflow { display: none; }
+body.roll-effects-off #roll-controls .wind-streak, body.roll-effects-off #roll-controls .blower-held-motion, body.roll-effects-off #roll-controls .blower-rotor { animation: none; will-change: auto; }

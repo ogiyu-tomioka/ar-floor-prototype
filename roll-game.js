@@ -1,5 +1,7 @@
 (function () {
   'use strict';
+  const windEffects = new URLSearchParams(location.search).get('windfx') !== 'off';
+  document.body.classList.toggle('roll-effects-off', !windEffects);
   const panel = document.createElement('section');
   panel.id = 'roll-controls'; panel.hidden = true;
   panel.innerHTML = `<div id="roll-guidance"><p id="roll-notice" role="status">端末の背面から風を出そう</p>
@@ -14,12 +16,8 @@
     <div class="roll-airflow" aria-hidden="true">
       <span class="wind-lane" data-start="-4,18" data-end="46,47" style="--wind-delay:0s"><i class="wind-streak"></i></span>
       <span class="wind-lane" data-start="104,18" data-end="54,47" style="--wind-delay:-0.48s"><i class="wind-streak"></i></span>
-      <span class="wind-lane" data-start="-4,39" data-end="46,49" style="--wind-delay:-0.12s"><i class="wind-streak"></i></span>
-      <span class="wind-lane" data-start="104,39" data-end="54,49" style="--wind-delay:-0.6s"><i class="wind-streak"></i></span>
       <span class="wind-lane" data-start="-4,65" data-end="46,51" style="--wind-delay:-0.24s"><i class="wind-streak"></i></span>
       <span class="wind-lane" data-start="104,65" data-end="54,51" style="--wind-delay:-0.72s"><i class="wind-streak"></i></span>
-      <span class="wind-lane" data-start="-4,88" data-end="46,53" style="--wind-delay:-0.36s"><i class="wind-streak"></i></span>
-      <span class="wind-lane" data-start="104,88" data-end="54,53" style="--wind-delay:-0.84s"><i class="wind-streak"></i></span>
     </div>
     <section id="roll-catch-toast" role="status" aria-live="polite" hidden>
       <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle cx="24" cy="24" r="20" fill="#f4da8d"/><path d="M14 24L21 31L35 16" fill="none" stroke="#173c35" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -27,9 +25,7 @@
     </section>
     <div class="roll-blower" aria-hidden="true">
       <svg class="blower-idle" viewBox="0 0 180 150" focusable="false">
-        <path d="M112 112L141 104L172 135L153 150L124 140Z" fill="#526f73" stroke="#142e35" stroke-width="3"/>
         <path d="M101 96L126 87L144 123L122 135Z" fill="#19333b" stroke="#9cc7c6" stroke-width="2"/>
-        <path d="M125 112C113 106 107 116 115 126L131 139L152 123L139 108C133 102 126 106 125 112Z" fill="#a3b6af" stroke="#304e52" stroke-width="3"/>
         <path d="M46 25L80 17L132 70L78 111Z" fill="#426b74" stroke="#142e35" stroke-width="3"/>
         <path d="M53 28L76 24L110 65L86 85Z" fill="#729f9e"/>
         <ellipse cx="65" cy="27" rx="20" ry="10" transform="rotate(-15 65 27)" fill="#c0ebe0" stroke="#20444c" stroke-width="3"/>
@@ -41,7 +37,7 @@
         </g>
       </svg>
       <div class="blower-held-motion"><div class="blower-held">
-        <img class="blower-shell" src="icons/blower-held.svg?v=0.3.19" alt="" width="180" height="150">
+        <img class="blower-shell" src="icons/blower-held.svg?v=0.3.20" alt="" width="180" height="150">
         <img class="blower-rotor" src="icons/blower-rotor.svg?v=0.3.19" alt="" width="60" height="60">
         <img class="blower-grille" src="icons/blower-grille.svg?v=0.3.19" alt="" width="180" height="150">
       </div></div>
@@ -207,7 +203,7 @@
   window.RollCaptureBridge = {
     suspend: function () { reset(); hideMonsterMarkers(); },
     markers: updateMonsterMarkers,
-    snapshot: function () { return {report: latest, blowing: blowing, paused: paused()}; },
+    snapshot: function () { return {report: latest, blowing: blowing, paused: paused(), effects: windEffects ? 'reduced' : 'off'}; },
     readControls: function () { if (paused()) { reset(); hideMonsterMarkers(); return [0,0,1]; } return [blowing?1:0,0,0]; },
     report: function (value) {
       if (value.gameplayRevision !== '0.3.13') {
@@ -249,7 +245,7 @@
       if (hasAim) shadeWindGuide(value, force);
       if (versionNote) {
         const arVersion = window.FloorProbeBridge && FloorProbeBridge.webRevision || '従来モード';
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.19';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.20';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();

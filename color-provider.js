@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.19',maximumImageGapMs=2000;
+    const webRevision='0.3.20',maximumImageGapMs=2000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
@@ -42,6 +42,31 @@
     let startedAt=0,nextPoseSample=0,recognitionWaitAt=0,startTimer=0,gameReadyAt=0;
     let readyData=null,dataLoaded=false,dataAttempt=0;
     let recoveryKind='',recoverySince=null;
+    const performanceHistory=[];
+    let performancePhase=null,performanceChangedAt=0,performanceClock=0,performanceFrame=0;
+    function resetPerformance(){performanceHistory.length=0;performancePhase=null;performanceChangedAt=performanceClock=performanceFrame=0;}
+    function samplePerformance(value,gameState){
+      if(!running)return;
+      const clock=performance.now(),blowing=!!(gameState&&gameState.blowing);
+      if(performancePhase!==blowing){performancePhase=blowing;performanceChangedAt=clock;}
+      const elapsed=clock-performanceClock;
+      const arFps=performanceClock>0&&elapsed>0&&elapsed<=1500&&frame[0]>=performanceFrame?(frame[0]-performanceFrame)*1000/elapsed:null;
+      performanceHistory.push({elapsedMs:Math.round(clock-startedAt),blowing,effects:gameState&&gameState.effects||'unknown',
+        settled:clock-performanceChangedAt>=700&&frame[2]>.5&&!!gameState&&!gameState.paused,
+        unityFps:finite(value.fps)&&value.fps>0?value.fps:null,arFps});
+      if(performanceHistory.length>120)performanceHistory.shift();
+      performanceClock=clock;performanceFrame=frame[0];
+    }
+    function performanceSnapshot(){
+      const phases={};
+      for(const name of ['idle','blowing']){
+        const samples=performanceHistory.filter(s=>s.settled&&s.blowing===(name==='blowing'));
+        const unity=samples.map(s=>s.unityFps).filter(finite),ar=samples.map(s=>s.arFps).filter(finite);
+        phases[name]={samples:samples.length,unityFpsMean:unity.length?unity.reduce((a,b)=>a+b,0)/unity.length:null,
+          unityFpsMin:unity.length?Math.min(...unity):null,arFpsMean:ar.length?ar.reduce((a,b)=>a+b,0)/ar.length:null};
+      }
+      return{source:'existing-half-second-unity-reports-and-ar-update-counter',phaseSettlingMs:700,phases,samples:performanceHistory.slice()};
+    }
     function resetReacquisition(){recoveryKind='';recoverySince=null;}
     function reacquisitionState(){
       const clock=performance.now();
@@ -285,7 +310,7 @@
         const results=await waitForPermissions(permissions);if(token!==session||document.hidden)return;record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
         await ensureData();if(token!==session||document.hidden){starting=false;return;}
         anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
-        startedAt=performance.now();recognitionWaitAt=startedAt;nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
+        resetPerformance();startedAt=performance.now();recognitionWaitAt=startedAt;nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
         Object.assign(tracking,{source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
           rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0});
         canvas.width=Math.max(1,innerWidth);canvas.height=Math.max(1,innerHeight);sizeInput.disabled=true;
@@ -312,7 +337,7 @@
         phase:state.phase,error,config,layout,tracking:{...tracking,imageVisible,lastImageAgeMs:anchor?performance.now()-lastAnchorAt:null,
           lastImageLostAgeMs:anchor&&!imageVisible&&imageLostAt?performance.now()-imageLostAt:null},
         anchor,rawCamera:rawCamera?{position:rawCamera.position,rotation:rawCamera.rotation}:null,frame:Array.from(frame),unity:unityReport,
-        reacquisition:reacquisitionState(),paperRotation:paperRotation.snapshot(),startup:window.RollStartup?RollStartup.snapshot():null,game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
+        renderPerformance:performanceSnapshot(),reacquisition:reacquisitionState(),paperRotation:paperRotation.snapshot(),startup:window.RollStartup?RollStartup.snapshot():null,game:window.RollCaptureBridge?RollCaptureBridge.snapshot():null,feed:state.cameraFeed,alpha:unityAlpha,poseHistory,lifecycle,events};
       const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='roll-by-blow-color-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
     });
@@ -428,7 +453,7 @@
     }
   }
     return {
-      webRevision,
+      webRevision,renderPerformance:performanceSnapshot,
       retryReady:()=>{error='';prepareData();},
       retryStart:()=>{stop();error='';if(!unity||!config||!engineReady){ready();if(window.RollStartup)RollStartup.fail('まだゲームの準備が完了していません。','Boot resources are not ready','boot');return;}dataAttempt++;dataLoaded=false;readyData=null;start();},
       stopForFailure:stop,
@@ -441,9 +466,11 @@
       readFrame:()=>{if(!running||performance.now()-lastPoseAt>350){frame[2]=frame[35]=0;}return config&&config.frameFloatCount===39?frame:legacyFrame;},
       report:value=>{
         unityReport=value;placed=!!value.placed;
+        const gameState=window.RollCaptureBridge?RollCaptureBridge.snapshot():null;
+        samplePerformance(value,gameState);
         if(diagnostics.open)refreshMetrics();
         if(running&&placed){
-          const game=window.RollCaptureBridge?RollCaptureBridge.snapshot().report:null;
+          const game=gameState?gameState.report:null;
           if(!game){if(!gameReadyAt)gameReadyAt=performance.now();else if(performance.now()-gameReadyAt>8000){gameReadyAt=Infinity;deferFailure('ステージのゲームを開始できませんでした。もう一度開始してください。');}}
           else{gameReadyAt=0;if(game.message==='Stage definition missing')deferFailure('ステージの設定を読み込めませんでした。');}
         }else gameReadyAt=0;
