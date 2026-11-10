@@ -5,6 +5,9 @@ License: AFRAME-LICENSE.txt
 AR.js 3.4.8 NFT build
 https://raw.githubusercontent.com/AR-js-org/AR.js/3.4.8/aframe/build/aframe-ar-nft.js
 Licenses: ARJS-LICENSE.txt, ARTOOLKIT-LICENSE.txt, THREE-LICENSE.txt
+Roll-by-Blow 0.3.26 adaptation: initialize from the source video dimensions
+after metadata arrives, restart the worker when those dimensions change,
+and retain the NFT projection matrix for the rendering camera.
 
 MindAR.js 1.2.5 face build
 https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face-aframe.prod.js

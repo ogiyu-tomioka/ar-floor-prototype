@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   const face = new URLSearchParams(location.search).get('mode') === 'face';
-  const revision = '0.3.25';
+  document.body.dataset.mode = face ? 'face' : 'paper';
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let scene = null, paperVisible = false, videoReady = false, descriptorReady = false;
   let poseTimer = 0, yaw = 0;
@@ -61,6 +61,18 @@
     window.addEventListener('arjs-video-loaded', event => {
       const video = event.detail && event.detail.component;
       if (!video) return;
+      function fitLayers() {
+        const {videoWidth, videoHeight} = video;
+        if (!videoWidth || !videoHeight) return;
+        const viewport = document.documentElement;
+        const scale = Math.max(viewport.clientWidth / videoWidth, viewport.clientHeight / videoHeight);
+        document.body.style.setProperty('--camera-width', videoWidth * scale + 'px');
+        document.body.style.setProperty('--camera-height', videoHeight * scale + 'px');
+      }
+      fitLayers();
+      video.addEventListener('loadedmetadata', fitLayers);
+      video.addEventListener('resize', fitLayers);
+      window.addEventListener('resize', fitLayers);
       video.muted = true;
       video.play().catch(() => {});
       videoReady = true;
@@ -126,7 +138,7 @@
   async function init() {
     try {
       await loadScript('vendor/aframe.min.js?v=1.6.0');
-      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5':'vendor/aframe-ar-nft.js?v=3.4.8');
+      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5':'vendor/aframe-ar-nft.js?v=3.4.8-rbb1');
       const fragment = document.getElementById(face?'face-scene':'paper-scene').content.cloneNode(true);
       scene = fragment.querySelector('a-scene');
       if (face) configureFace();

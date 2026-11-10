@@ -24,7 +24,7 @@
     document.getElementById('live-title').textContent = title;
     document.getElementById('eyebrow').textContent = 'FIELD NOTE / EXTRA';
     document.getElementById('intro-text').textContent = '前面カメラに顔を映すと、ミニモンスターの耳と頬の模様が現れます。顔を動かして変身を楽しもう。';
-    document.getElementById('engine-label').textContent = 'MindAR.js / 顔追跡';
+    document.getElementById('engine-label').textContent = 'MindAR.js / 顔追跡 · 0.3.26';
     document.getElementById('print-link').hidden = true;
     document.getElementById('pose-controls').hidden = true;
     for (const id of ['alternate-link', 'live-alternate']) {
@@ -63,7 +63,7 @@
     camera = document.createElement('iframe');
     camera.title = face ? '変身カメラ' : '観察カメラ';
     camera.allow = 'camera';
-    camera.src = 'camera.html?v=0.3.25' + (face ? '&mode=face' : '');
+    camera.src = 'camera.html?v=0.3.26' + (face ? '&mode=face' : '');
     host.appendChild(camera);
     deadline = setTimeout(() => {
       stop('カメラまたは認識データの準備に時間がかかっています。Safariのカメラ許可と通信を確認して、もう一度始めてください。');

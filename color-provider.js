@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.25',maximumImageGapMs=2000;
+    const webRevision='0.3.26',maximumImageGapMs=2000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
