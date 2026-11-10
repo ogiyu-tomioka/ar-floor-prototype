@@ -55,6 +55,11 @@ body.roll-playing.roll-tools-open .bottom { display: block; bottom: calc(175px +
 #roll-book::backdrop { background: #0009; }
 #roll-book h2 { font-size: 19px; margin: 0 0 14px; }
 #roll-book button { margin: 12px 6px 0 0; }
+#roll-book #roll-observe { width: 100%; color: #102e2b; background: #b7efd8; font-weight: 750; }
+#roll-observe-help { margin: 7px 0 0; color: #c5e1d7; font-size: .85rem; line-height: 1.5; }
+.permission-mode-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 18px; margin-top: 13px; font-size: .88rem; }
+.permission-mode-links a { color: #c1f4e3; text-underline-offset: 4px; padding: 5px 0; }
+.permission-mode-note { margin: 12px 0 0; color: #def4e8; font-size: .88rem; line-height: 1.5; }
 #roll-blow { pointer-events: auto; display: block; margin-left: auto; width: 180px; height: 72px; border: 2px solid #d4f8e9aa; border-radius: 36px; background: #102923ee; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; font-size: 16px; font-weight: 700; }
 #roll-blow[aria-pressed="true"] { background: #e6bb65; color: #102923; }
 body.roll-tools-open #roll-blow { opacity: .3; pointer-events: none; }

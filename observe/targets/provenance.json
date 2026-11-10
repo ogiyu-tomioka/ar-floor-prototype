@@ -1,0 +1,26 @@
+{
+  "name": "rbb-monster-observation-01",
+  "printedMillimeters": [
+    135,
+    180
+  ],
+  "artworkPixels": [
+    1080,
+    1440
+  ],
+  "nftPixels": [
+    810,
+    1080
+  ],
+  "nftDpi": 152.4,
+  "artworkSha256": "830f059242a67d3d6c293a73a3e0a2bec267b1985435fbdc6adf9488ecd2b7fc",
+  "files": {
+    "rbb-monster-observation-01.fset": "4f73c841feeb045bad49bffc69948cd628714d4bcd7249ca8c2181076b31d995",
+    "rbb-monster-observation-01.fset3": "185cc28f87ba4210197dbc72bdeb720189acbfb79db1d1bb7d0367e83610bd6f",
+    "rbb-monster-observation-01.iset": "2c662d450ef887a642a6d0037a5818b6fb324125fa4034d94875c4157af8c7d1",
+    "rbb-monster-observation-01.json": "9446aa4e142ca7de7eb612709dbf2b2abb681b85c29ca18c4c6c911fc7d11684",
+    "rbb-monster-observation-01_luminance.png": "39b00b7a15fcb6ee5c064a8f3b19b621ebc4edefd428d08cbab0eb617f347477"
+  },
+  "nftCompiler": "https://github.com/Carnaux/NFT-Marker-Creator/tree/44c4cdff3f3a184f61d52235fafed0098faf6478",
+  "routerCompiler": "8th Wall image-target-cli applyCrop, bundled Sharp import"
+}

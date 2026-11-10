@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Roll-by-Blow 観察用紙</title>
+  <style>
+    * { box-sizing:border-box; }
+    body { font-family:system-ui,sans-serif; color:#153236; background:#f2f2ea; margin:0; }
+    .tools { max-width:640px; padding:16px; margin:auto; }
+    .tools p { line-height:1.6; }
+    .tools button,.tools a { margin:0 12px 8px 0; }
+    .sheet { background:white; width:min(210mm,100%); margin:auto; padding:12mm 6mm 8mm; text-align:center; }
+    h1 { font-size:19pt; margin:0 0 3mm; }
+    .subtitle { font-size:10pt; margin:0 0 5mm; }
+    img { width:135mm; max-width:100%; height:auto; display:block; margin:auto; }
+    .measure { margin:4mm auto 0; font-size:9pt; }
+    @page { size:A4 portrait; margin:8mm; }
+    @media print {
+      body { background:white; color:black; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+      .tools { display:none; }
+      .sheet { width:100%; margin:0; padding:8mm 0 0; }
+      img { width:135mm; height:180mm; max-width:none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="tools" aria-label="印刷とゲーム">
+    <p>A4縦・カラー・倍率100%で印刷してください。中央のカラー図柄は横135mm、縦180mmです。</p>
+    <button type="button" onclick="window.print()">印刷する</button>
+    <a href="monster-marker.png" download>マーカー画像を保存</a>
+    <a href="./">モンスター観察へ</a>
+  </nav>
+  <main class="sheet">
+    <h1>Roll-by-Blow</h1>
+    <p class="subtitle">モンスター観察用紙 01</p>
+    <img src="monster-marker.png" alt="ミニモンスターの顔と非対称の模様があるカラーの観察用マーカー">
+    <p class="measure">カラー図柄の外寸　135 × 180 mm</p>
+  </main>
+</body>
+</html>

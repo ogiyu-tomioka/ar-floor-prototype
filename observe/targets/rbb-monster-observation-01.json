@@ -1,0 +1,26 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "left": 0,
+    "top": 0,
+    "width": 1080,
+    "height": 1440,
+    "originalWidth": 1080,
+    "originalHeight": 1440,
+    "isRotated": false
+  },
+  "imagePath": "observe/targets/rbb-monster-observation-01_luminance.png",
+  "metadata": {
+    "physicalWidthMeters": 0.135,
+    "physicalHeightMeters": 0.18
+  },
+  "name": "rbb-monster-observation-01",
+  "resources": {
+    "originalImage": "rbb-monster-observation-01_original.png",
+    "croppedImage": "rbb-monster-observation-01_cropped.png",
+    "thumbnailImage": "rbb-monster-observation-01_thumbnail.png",
+    "luminanceImage": "rbb-monster-observation-01_luminance.png"
+  },
+  "created": 1794298558453,
+  "updated": 1794298558453
+}

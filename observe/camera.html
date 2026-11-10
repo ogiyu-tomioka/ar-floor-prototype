@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Roll-by-Blow カメラ</title>
+  <style>
+    html,body,#stage { margin:0; position:fixed; inset:0; overflow:hidden; }
+    body { background:#142c2e; }
+    a-scene { width:100%; height:100%; }
+    #error-popup { display:none; }
+  </style>
+  <script src="camera.js?v=0.3.25" defer></script>
+</head>
+<body>
+  <div id="stage"></div>
+  <template id="paper-scene">
+    <a-scene embedded vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:false"
+      renderer="antialias:false; precision:medium; colorManagement:true">
+      <a-entity light="type:ambient; color:#ffffff; intensity:1.25"></a-entity>
+      <a-entity light="type:directional; color:#fff3de; intensity:1.65" position="-1 2 1"></a-entity>
+      <a-nft id="paper-anchor" type="nft" smooth="true" smooth-count="5" smooth-tolerance="0.01" smooth-threshold="2">
+        <a-entity id="paper-center" position="67.5 0 -90">
+          <a-circle radius="25" rotation="-90 0 0" position="0 .2 0"
+            material="shader:flat; color:#132e32; opacity:.33; transparent:true"></a-circle>
+          <a-entity id="monster-heading">
+            <a-entity id="monster-rig" scale="95 95 95"></a-entity>
+          </a-entity>
+        </a-entity>
+      </a-nft>
+      <a-entity camera="near:0.1; far:4000" look-controls="enabled:false" wasd-controls="enabled:false"></a-entity>
+    </a-scene>
+  </template>
+  <template id="face-scene">
+    <a-scene embedded mindar-face="uiLoading:no; uiScanning:no; uiError:no"
+      vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:false"
+      renderer="antialias:false; precision:medium; colorManagement:true">
+      <a-camera active="false" look-controls="enabled:false"></a-camera>
+      <a-entity light="type:ambient; color:#fff; intensity:1.2"></a-entity>
+      <a-entity light="type:directional; color:#fff3de; intensity:1.6" position="-1 2 1"></a-entity>
+      <a-entity mindar-face-target="anchorIndex:10">
+        <a-entity position="-.28 .18 -.055" rotation="0 0 24">
+          <a-sphere radius=".14" scale=".82 1.33 .64" color="#28a987" segments-width="18" segments-height="12"></a-sphere>
+          <a-sphere radius=".09" position="0 .015 .066" scale=".75 1.22 .36" color="#a8ebbc" segments-width="16" segments-height="10"></a-sphere>
+        </a-entity>
+        <a-entity position=".28 .18 -.055" rotation="0 0 -24">
+          <a-sphere radius=".14" scale=".82 1.33 .64" color="#28a987" segments-width="18" segments-height="12"></a-sphere>
+          <a-sphere radius=".09" position="0 .015 .066" scale=".75 1.22 .36" color="#a8ebbc" segments-width="16" segments-height="10"></a-sphere>
+        </a-entity>
+      </a-entity>
+      <a-entity mindar-face-target="anchorIndex:50">
+        <a-sphere radius=".061" position="0 0 .025" scale="1.1 .54 .34" color="#39ba98" segments-width="16" segments-height="10"></a-sphere>
+        <a-sphere radius=".025" position=".082 -.026 .024" scale="1 .72 .42" color="#f4ca73" segments-width="12" segments-height="8"></a-sphere>
+      </a-entity>
+      <a-entity mindar-face-target="anchorIndex:280">
+        <a-sphere radius=".061" position="0 0 .025" scale="1.1 .54 .34" color="#39ba98" segments-width="16" segments-height="10"></a-sphere>
+        <a-sphere radius=".025" position="-.082 -.026 .024" scale="1 .72 .42" color="#f4ca73" segments-width="12" segments-height="8"></a-sphere>
+      </a-entity>
+    </a-scene>
+  </template>
+</body>
+</html>

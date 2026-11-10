@@ -45,6 +45,8 @@
   const dialog = document.createElement('dialog');
   dialog.id = 'roll-book';
   dialog.innerHTML = '<h2>図鑑</h2><div id="roll-entries"></div><p id="roll-save-status"></p>'
+    + '<button id="roll-observe" aria-describedby="roll-observe-help">モンスター観察へ</button>'
+    + '<p id="roll-observe-help">観察用紙を使って、モンスターの動きを見られます。</p>'
     + '<button id="roll-export">記録を書き出す</button><button id="roll-close">閉じる</button>';
   document.body.appendChild(dialog);
   const button = document.getElementById('roll-blow');
@@ -161,6 +163,10 @@
   });
   document.getElementById('roll-collection').addEventListener('click', function () { reset(); dialog.showModal(); });
   document.getElementById('roll-close').addEventListener('click', function () { dialog.close(); reset(); });
+  document.getElementById('roll-observe').addEventListener('click', function () {
+    reset();
+    window.location.assign('observe/');
+  });
   dialog.addEventListener('cancel', reset);
   document.getElementById('roll-export').addEventListener('click', function () {
     const url = URL.createObjectURL(new Blob([JSON.stringify(collection,null,2)],{type:'application/json'}));
@@ -243,7 +249,7 @@
       if (hasAim) shadeWindGuide(value, force);
       if (versionNote) {
         const arVersion = window.FloorProbeBridge && FloorProbeBridge.webRevision || '従来モード';
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.24';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.25';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();

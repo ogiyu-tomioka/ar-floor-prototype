@@ -1,0 +1,13 @@
+A-Frame 1.6.0
+https://cdn.jsdelivr.net/npm/aframe@1.6.0/dist/aframe-master.min.js
+License: AFRAME-LICENSE.txt
+
+AR.js 3.4.8 NFT build
+https://raw.githubusercontent.com/AR-js-org/AR.js/3.4.8/aframe/build/aframe-ar-nft.js
+Licenses: ARJS-LICENSE.txt, ARTOOLKIT-LICENSE.txt, THREE-LICENSE.txt
+
+MindAR.js 1.2.5 face build
+https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face-aframe.prod.js
+License: MINDAR-LICENSE.txt
+The upstream bundle loads MediaPipe Tasks Vision 0.10.9 and the Face Landmarker model
+at run time from their fixed upstream URLs.

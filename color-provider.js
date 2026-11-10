@@ -2,13 +2,18 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.24',maximumImageGapMs=2000;
+    const webRevision='0.3.25',maximumImageGapMs=2000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
+    const chooseByPaper=!query.has('tracking')&&!query.has('target')&&query.get('mode')!=='capture';
+    const observationName='rbb-monster-observation-01';
+    const observationHoldMs=550;
+    let observationTarget=null,observationSeenAt=null,modeChoice='',handoffPending=false;
     const ui=Object.fromEntries(['start','stop','replace','recenter','place','loading','progress','phase','status','guidance','dimensions','metrics','download','coaching','reticle'].map(id=>[id,document.getElementById(id)]));
     const canvas=document.getElementById('camera-canvas');
     const diagnostics=document.getElementById('diagnostics');
+    const autoPaperNote=document.getElementById('roll-auto-paper-note');
     function setText(element,value){if(element.textContent!==value)element.textContent=value;}
     function refreshMetrics(){
       if(!unityReport)return;
@@ -95,11 +100,11 @@
     const tracking={source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
       rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0};
     const finite=value=>typeof value==='number'&&Number.isFinite(value);
-    function loadReferenceImage(target){
+    function loadReferenceImage(target,timeoutMs=15000){
       return new Promise((resolve,reject)=>{
         const img=new Image();
         const finish=e=>{clearTimeout(timer);img.onload=img.onerror=null;if(e)reject(e);else resolve();};
-        const timer=setTimeout(()=>finish(Error('認識用の画像の読み込みが時間内に完了しませんでした。')),15000);
+        const timer=setTimeout(()=>finish(Error('認識用の画像の読み込みが時間内に完了しませんでした。')),timeoutMs);
         img.onload=()=>{
           if(img.naturalWidth!==480||img.naturalHeight!==640){finish(Error('認識画像の構成が一致しません。同じ更新フォルダーの中身を公開してください。'));return;}
           record('target-image-ready',{name:target.name,width:img.naturalWidth,height:img.naturalHeight});finish();
@@ -108,11 +113,24 @@
         img.src=target.imagePath;
       });
     }
-    async function fetchJson(url){
+    async function fetchJson(url,timeoutMs=15000){
       const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort(),15000);
+      const timer=setTimeout(()=>controller.abort(),timeoutMs);
       try{const r=await fetch(url,{cache:'no-cache',signal:controller.signal});if(!r.ok)throw Error('認識データを取得できません: '+r.status);return await r.json();}
       finally{clearTimeout(timer);}
+    }
+    async function loadObservationTarget(){
+      if(!chooseByPaper)return null;
+      try{
+        const target=await fetchJson('observe/targets/'+observationName+'.json?v='+webRevision,3000);
+        if(target.name!==observationName)throw Error('観察用紙の名前が一致しません。');
+        target.imagePath=new URL(target.imagePath,location.href).href;
+        await loadReferenceImage(target,3000);
+        return target;
+      }catch(error){
+        record('observation-routing-unavailable',String(error));
+        return null;
+      }
     }
     function ensureData(){
       if(dataLoaded)return Promise.resolve();
@@ -120,13 +138,15 @@
       const attempt=++dataAttempt;
       readyData=(async()=>{
         const layoutFile=targetMode==='frame'?'paper/stage-layout-frame-0.3.17.json':'paper/stage-layout.json';
-        const paper=await fetchJson(layoutFile+'?v='+webRevision);
+        const [paper,observer]=await Promise.all([fetchJson(layoutFile+'?v='+webRevision),loadObservationTarget()]);
         if(!Array.isArray(paper.targets)||!paper.targets.length)throw Error('用紙の認識設定がありません。');
         const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+webRevision)));
         for(const target of data){const url=new URL(target.imagePath,location.href);url.searchParams.set('v',webRevision);url.searchParams.set('attempt',String(attempt));target.imagePath=url.href;}
-        await Promise.all(data.map(loadReferenceImage));
+        await Promise.all(data.map(target=>loadReferenceImage(target)));
         if(attempt!==dataAttempt)return;
-        layout=paper;targets=data;dataLoaded=true;ready();
+        layout=paper;targets=data;observationTarget=observer;dataLoaded=true;
+        if(autoPaperNote)autoPaperNote.hidden=!observationTarget;
+        ready();
       })().catch(e=>{if(attempt===dataAttempt){readyData=null;dataLoaded=false;}throw e;});
       return readyData;
     }
@@ -178,7 +198,7 @@
     }
     function ready(){
       if(unity&&config&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
-        state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'許可して比較を始める':'許可して始める';
+        state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'許可して比較を始める':observationTarget?'許可して用紙を読む':'許可して始める';
         ui.loading.hidden=true;ui.status.textContent='準備できました。';ui.phase.textContent='開始前';
       }
     }
@@ -207,6 +227,7 @@
       if(window.XR8&&added){try{XR8.stop();}catch(e){record('stop-error',String(e));}}
       destroyManualRenderer();frame.fill(0);anchor=null;imageVisible=false;imageLostAt=0;placed=false;lastPoseAt=0;
       visibleTargets.clear();targetAnchors.clear();
+      observationSeenAt=null;modeChoice='';handoffPending=false;
       send('ClearPlacement');sizeInput.disabled=false;
       ui.stop.disabled=ui.replace.disabled=ui.recenter.disabled=true;ui.start.hidden=false;
       state.phase='stopped';ready();
@@ -216,6 +237,10 @@
     function imageUpdate(event){
       const d=event.detail;
       if(!d||!layout)return;
+      if(observationTarget&&d.name===observationName){
+        if((running||starting)&&!modeChoice&&observationSeenAt===null)observationSeenAt=performance.now();
+        return;
+      }
       const spec=layout.targets.find(t=>t.name===d.name);if(!spec)return;
       // Store a snapshot: SDK event objects must not mutate the retained world reference.
       const candidate={...spec,position:copyPosition(d.position),rotation:copyRotation(d.rotation),scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight,updatedAt:performance.now()};
@@ -223,10 +248,28 @@
       if(!RollColorPose.cameraInBoard(sample,candidate,Number(sizeInput.value)/100)){
         record('image-pose-rejected',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth});return;
       }
+      modeChoice='capture';
+      observationSeenAt=null;
       const wasVisible=visibleTargets.has(d.name);visibleTargets.add(d.name);targetAnchors.set(d.name,candidate);
       if(!anchor||anchor.name===d.name||!visibleTargets.has(anchor.name)||performance.now()-lastAnchorAt>200){anchor=candidate;lastAnchorAt=candidate.updatedAt;}
       imageVisible=visibleTargets.has(anchor.name);if(imageVisible)imageLostAt=0;tracking.imageUpdates++;
       if(!wasVisible){tracking.imageFound++;record('image-found',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth,scaledHeight:d.scaledHeight});}
+    }
+    function checkObservationHandoff(clock){
+      if(modeChoice||handoffPending||observationSeenAt===null||clock-observationSeenAt<observationHoldMs)return;
+      handoffPending=true;
+      const token=session;
+      // Release the SDK outside its current render callback.
+      setTimeout(()=>{
+        if(token!==session)return;
+        handoffPending=false;
+        if(!running||document.hidden||modeChoice||observationSeenAt===null||performance.now()-observationSeenAt<observationHoldMs)return;
+        modeChoice='observation';
+        record('paper-mode-selected','observation');
+        if(window.RollCaptureBridge)RollCaptureBridge.suspend();
+        stop();
+        location.assign(new URL('observe/?entry=paper',location.href).href);
+      },0);
     }
     function update(result){
       if(!running)return;
@@ -238,6 +281,7 @@
       rawCamera=valid?camera:null;
       const pose=valid&&anchor?RollColorPose.cameraInBoard(camera,anchor,Number(sizeInput.value)/100):null;
       const clock=performance.now();
+      checkObservationHandoff(clock);
       const normal=valid&&camera.trackingStatus==='NORMAL'&&camera.trackingReason!=='INITIALIZING';
       const imageAgeMs=anchor?clock-lastAnchorAt:Infinity;
       const lostAgeMs=anchor?(imageVisible?0:(imageLostAt?clock-imageLostAt:imageAgeMs)):Infinity;
@@ -268,20 +312,26 @@
       samplePose(clock,valid?camera:null,pose,imageFresh);
       setText(ui.phase,usable?'プレイ中':anchor?'一時停止':'認識中');
       const recovery=reacquisitionState();
-      setText(ui.status,recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':'用紙の枠全体を映してください'));
+      const scanInstruction=observationTarget&&!modeChoice?'捕獲用紙か観察用紙を1枚映してください。':'用紙の枠全体を映してください';
+      setText(ui.status,recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':scanInstruction));
       if(!anchor&&clock-recognitionWaitAt>25000){recognitionWaitAt=Infinity;deferFailure('用紙を認識できませんでした。枠全体と明るさを確認して、もう一度開始してください。');}
+    }
+    function trackingTargets(){
+      return observationTarget?[...targets,observationTarget]:targets;
     }
     function addModules(){
       XR8.XrController.configure({disableWorldTracking:imageOnly,enableLighting:false,enableWorldPoints:false,
-        leftHandedAxes:false,mirroredDisplay:false,scale:'responsive',imageTargetData:targets});
-      record('tracking-settings',{webRevision,imageOnly,targetMode,targetNames:targets.map(t=>t.name),targetCount:targets.length,arTargetFps:30,maximumImageGapMs});
+        leftHandedAxes:false,mirroredDisplay:false,scale:'responsive',imageTargetData:trackingTargets()});
+      record('tracking-settings',{webRevision,imageOnly,targetMode,targetNames:trackingTargets().map(t=>t.name),targetCount:trackingTargets().length,arTargetFps:30,maximumImageGapMs});
       if(added)return;
       XR8.addCameraPipelineModules([XR8.GlTextureRenderer.pipelineModule(),XR8.XrController.pipelineModule(),{
         name:'roll-color-image-world',
         listeners:[
           {event:'reality.imagefound',process:imageUpdate},{event:'reality.imageupdated',process:imageUpdate},
           {event:'reality.imagelost',process:event=>{
-            if(!event.detail)return;visibleTargets.delete(event.detail.name);
+            if(!event.detail)return;
+            if(event.detail.name===observationName){observationSeenAt=null;return;}
+            visibleTargets.delete(event.detail.name);
             if(anchor&&anchor.name===event.detail.name){
               for(const name of visibleTargets){const other=targetAnchors.get(name);if(other){anchor=other;lastAnchorAt=other.updatedAt;break;}}
             }
@@ -296,7 +346,7 @@
           clearTimeout(startTimer);startTimer=0;if(window.RollStartup)RollStartup.clear();
           destroyManualRenderer();xrGl=result.GLctx;setProjection(result.canvasWidth,result.canvasHeight);
           // Set the active image data once after all pipeline modules have attached as well.
-          XR8.XrController.configure({imageTargetData:targets});
+          XR8.XrController.configure({imageTargetData:trackingTargets()});
           state.cameraFeed.manualError='';
           state.phase='running';starting=false;running=true;startLoop();record('camera-start',{width:result.canvasWidth,height:result.canvasHeight});
         },
@@ -317,6 +367,7 @@
         const permissions=[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
         const results=await waitForPermissions(permissions);if(token!==session||document.hidden)return;record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
         await ensureData();if(token!==session||document.hidden){starting=false;return;}
+        observationSeenAt=null;modeChoice='';handoffPending=false;
         anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
         resetPerformance();startedAt=performance.now();recognitionWaitAt=startedAt;nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
         Object.assign(tracking,{source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
@@ -334,7 +385,7 @@
     function rereadPaper(){
       if(!running||starting)return;
       if(window.RollCaptureBridge)RollCaptureBridge.suspend();
-      resetPaperRotation();resetReacquisition();anchor=null;imageVisible=false;imageLostAt=0;
+      resetPaperRotation();resetReacquisition();anchor=null;imageVisible=false;imageLostAt=0;observationSeenAt=null;
       visibleTargets.clear();targetAnchors.clear();placed=false;frame[2]=frame[35]=0;send('ClearPlacement');
       recognitionWaitAt=performance.now();
       record('clear-image-anchor',null);
