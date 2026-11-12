@@ -2,7 +2,8 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.28',maximumImageGapMs=2000;
+    const webRevision='0.3.29',maximumImageGapMs=2000;
+    const captureDataRevision='0.3.17',observationDataRevision='0.3.25';
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
@@ -45,7 +46,7 @@
     let anchor=null,imageVisible=false,lastAnchorAt=0,imageLostAt=0,lastPoseAt=0,placed=false,placementAt=0,unityReport=null;
     let xrGl=null,latestCameraFrame=null,manualRenderer=null,raf=0,nextTick=0,lastMode='',rawCamera=null,session=0;
     let startedAt=0,nextPoseSample=0,recognitionWaitAt=0,startTimer=0,gameReadyAt=0;
-    let readyData=null,dataLoaded=false,dataAttempt=0;
+    let readyData=null,dataLoaded=false,dataFailures=0;
     let recoveryKind='',recoverySince=null;
     const performanceHistory=[];
     let performancePhase=null,performanceEffects='unknown',performanceChangedAt=0,performanceClock=0,performanceFrame=0;
@@ -113,16 +114,16 @@
         img.src=target.imagePath;
       });
     }
-    async function fetchJson(url,timeoutMs=15000){
+    async function fetchJson(url,timeoutMs=15000,cache='default'){
       const controller=new AbortController();
       const timer=setTimeout(()=>controller.abort(),timeoutMs);
-      try{const r=await fetch(url,{cache:'no-cache',signal:controller.signal});if(!r.ok)throw Error('認識データを取得できません: '+r.status);return await r.json();}
+      try{const r=await fetch(url,{cache,signal:controller.signal});if(!r.ok)throw Error('認識データを取得できません: '+r.status);return await r.json();}
       finally{clearTimeout(timer);}
     }
     async function loadObservationTarget(){
       if(!chooseByPaper)return null;
       try{
-        const target=await fetchJson('observe/targets/'+observationName+'.json?v='+webRevision,3000);
+        const target=await fetchJson('observe/targets/'+observationName+'.json?v='+observationDataRevision,3000);
         if(target.name!==observationName)throw Error('観察用紙の名前が一致しません。');
         target.imagePath=new URL(target.imagePath,location.href).href;
         await loadReferenceImage(target,3000);
@@ -135,19 +136,26 @@
     function ensureData(){
       if(dataLoaded)return Promise.resolve();
       if(readyData)return readyData;
-      const attempt=++dataAttempt;
+      const cache=dataFailures?'reload':'default';
       readyData=(async()=>{
         const layoutFile=targetMode==='frame'?'paper/stage-layout-frame-0.3.17.json':'paper/stage-layout.json';
-        const [paper,observer]=await Promise.all([fetchJson(layoutFile+'?v='+webRevision),loadObservationTarget()]);
-        if(!Array.isArray(paper.targets)||!paper.targets.length)throw Error('用紙の認識設定がありません。');
-        const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+webRevision)));
-        for(const target of data){const url=new URL(target.imagePath,location.href);url.searchParams.set('v',webRevision);url.searchParams.set('attempt',String(attempt));target.imagePath=url.href;}
-        await Promise.all(data.map(target=>loadReferenceImage(target)));
-        if(attempt!==dataAttempt)return;
+        const captureData=fetchJson(layoutFile+'?v='+captureDataRevision,15000,cache).then(async paper=>{
+          if(!Array.isArray(paper.targets)||!paper.targets.length)throw Error('用紙の認識設定がありません。');
+          const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+captureDataRevision,15000,cache)));
+          for(const target of data){
+            const url=new URL(target.imagePath,location.href);
+            url.searchParams.set('v',captureDataRevision);
+            if(dataFailures)url.searchParams.set('retry',String(dataFailures));
+            target.imagePath=url.href;
+          }
+          await Promise.all(data.map(target=>loadReferenceImage(target)));
+          return {paper,data};
+        });
+        const [{paper,data},observer]=await Promise.all([captureData,loadObservationTarget()]);
         layout=paper;targets=data;observationTarget=observer;dataLoaded=true;
         if(autoPaperNote)autoPaperNote.hidden=!observationTarget;
         ready();
-      })().catch(e=>{if(attempt===dataAttempt){readyData=null;dataLoaded=false;}throw e;});
+      })().catch(error=>{dataFailures++;throw error;}).finally(()=>{readyData=null;});
       return readyData;
     }
     async function waitForPermissions(permissions){
@@ -157,8 +165,7 @@
       })]);}finally{clearTimeout(timer);}
     }
     function prepareData(){
-      const pending=ensureData(),attempt=dataAttempt;
-      pending.then(ready).catch(e=>{if(attempt===dataAttempt)fail('カラー用紙のデータを読み込めませんでした。',e);});
+      ensureData().catch(e=>fail('カラー用紙のデータを読み込めませんでした。',e));
     }
     const sizeRow=document.createElement('p');
     sizeRow.innerHTML='印刷したカラー枠の外幅 <input id="color-width" type="number" inputmode="decimal" min="5" max="60" value="18" step="0.1" style="width:4em"> cm · <a href="paper/print.html" target="_blank" rel="noopener">印刷用紙</a>';
@@ -197,7 +204,8 @@
       catch(e){record('unity-message-error',String(e));unity=null;config=null;if(window.RollStartup)RollStartup.fail('ゲーム本体との接続が切れました。',e,'boot',true);}
     }
     function ready(){
-      if((chooseByPaper||unity&&config)&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
+      if((chooseByPaper||unity&&config)&&dataLoaded&&engineReady&&!error&&!running&&!starting&&
+        (!window.RollStartup||!RollStartup.pending())){
         state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'許可して比較を始める':observationTarget?'許可して用紙を読む':'許可して始める';
         ui.loading.hidden=true;ui.status.textContent='準備できました。';ui.phase.textContent='開始前';
       }
@@ -222,9 +230,10 @@
       raf=requestAnimationFrame(tick);
     }
     function stop(){
+      const hadCamera=running||starting&&state.phase==='starting';
       session++;clearTimeout(startTimer);startTimer=0;gameReadyAt=0;
       running=false;starting=false;stopLoop();resetPaperRotation();resetReacquisition();
-      if(window.XR8&&added){try{XR8.stop();}catch(e){record('stop-error',String(e));}}
+      if(window.XR8&&added&&hadCamera){try{XR8.stop();}catch(e){record('stop-error',String(e));}}
       destroyManualRenderer();frame.fill(0);anchor=null;imageVisible=false;imageLostAt=0;placed=false;lastPoseAt=0;
       visibleTargets.clear();targetAnchors.clear();
       observationSeenAt=null;modeChoice='';handoffPending=false;
@@ -352,6 +361,7 @@
         ],
         onStart:result=>{
           if(!starting||(window.RollStartup&&!RollStartup.canResume()))return;
+          if(document.hidden){const token=session;setTimeout(()=>{if(token===session)stop();},0);return;}
           clearTimeout(startTimer);startTimer=0;if(window.RollStartup)RollStartup.clear();
           destroyManualRenderer();xrGl=result.GLctx;setProjection(result.canvasWidth,result.canvasHeight);
           // Set the active image data once after all pipeline modules have attached as well.
@@ -361,8 +371,8 @@
         },
         onUpdate:update,onProcessGpu:inspectCameraFrame,onRender:drawCameraFrame,
         onCanvasSizeChange:result=>{if(running)setProjection(result.canvasWidth,result.canvasHeight);},
-        onCameraStatusChange:result=>{record('camera',result.status);if(result.status==='failed')fail('カメラを開始できませんでした。');},
-        onException:e=>fail('ARエンジンのエラーです。',e),
+        onCameraStatusChange:result=>{if(starting||running){record('camera',result.status);if(result.status==='failed')fail('カメラを開始できませんでした。');}},
+        onException:e=>{if(starting||running)fail('ARエンジンのエラーです。',e);},
         onDetach:()=>{stopLoop();destroyManualRenderer();}
       }]);added=true;
     }
@@ -374,8 +384,9 @@
         const width=Number(sizeInput.value)/100;if(!finite(width)||width<.05||width>.6)throw Error('カラー枠の実測した外幅を5〜60cmで入力してください。');
         // Request motion only for the SDK's own world tracking; never overwrite its camera rotation.
         const permissions=[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(t=>t&&typeof t.requestPermission==='function').map(t=>t.requestPermission());
-        const results=await waitForPermissions(permissions);if(token!==session||document.hidden)return;record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
-        await ensureData();if(token!==session||document.hidden){starting=false;return;}
+        const results=await waitForPermissions(permissions);if(token!==session)return;if(document.hidden){stop();return;}
+        record('motion-permission',{results});if(results.some(r=>r!=='granted'))throw Error('モーションの利用を許可してください。');
+        await ensureData();if(token!==session)return;if(document.hidden){stop();return;}
         observationSeenAt=null;modeChoice='';handoffPending=false;
         anchor=null;imageVisible=false;imageLostAt=0;visibleTargets.clear();targetAnchors.clear();rawCamera=null;placed=false;placementAt=0;send('ClearPlacement');
         resetPerformance();startedAt=performance.now();recognitionWaitAt=startedAt;nextPoseSample=0;lastPoseAt=0;lastMode='';poseHistory.length=0;
@@ -409,7 +420,10 @@
       const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='roll-by-blow-color-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
     });
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',stop);
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden&&(running||state.phase==='starting'))stop();
+    });
+    window.addEventListener('pagehide',stop);
     function engineLoaded(){
       if(engineReady||!window.XR8||!window.XR8.XrController)return;
       engineReady=true;record('engine-ready',true);ready();
@@ -522,15 +536,25 @@
   }
     return {
       webRevision,canScanBeforeUnity:chooseByPaper,renderPerformance:performanceSnapshot,
-      retryReady:()=>{error='';prepareData();},
-      retryStart:()=>{stop();error='';if(!engineReady||(!chooseByPaper&&!(unity&&config))){ready();if(window.RollStartup)RollStartup.fail('まだゲームの準備が完了していません。','Boot resources are not ready','boot');return;}dataAttempt++;dataLoaded=false;readyData=null;start();},
+      retryReady:()=>{error='';prepareData();ready();},
+      refreshReady:ready,
+      retryStart:()=>{stop();error='';if(!engineReady||(!chooseByPaper&&!(unity&&config))){prepareData();return;}start();},
       stopForFailure:stop,
       startupState:()=>({registered:!!config,engineReady,dataLoaded,starting,running}),
       pixelRatio:1,captureContext:(kind,gl)=>{if(gl&&/webgl/.test(kind))installUnityAlphaGuard(gl);},
       progress:value=>{ui.progress.style.width=Math.round(value*100)+'%';},
-      banner:(message,type)=>{record('unity-'+type,String(message));if(type==='error')fail('Unity読み込みエラーです。',message);},fail,
+      banner:(message,type)=>record('unity-'+type,String(message)),fail,
       setUnity:instance=>{unity=instance;record('unity-ready',true);ready();},
-      register:value=>{config=value;record('unity-registered',{playerRevision:value.playerRevision,frameFloatCount:value.frameFloatCount});if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){fail('Unity本体は0.3.4のビルドが必要です。Web接続の更新だけでは旧Unityを更新できません。');return;}ready();},
+      register:value=>{
+        record('unity-registered',{playerRevision:value.playerRevision,frameFloatCount:value.frameFloatCount});
+        if(value.playerRevision!=='0.3.4'||!value.supportsColorTracking||value.frameFloatCount!==39){
+          if(window.RollStartup)RollStartup.fail('Unity本体は0.3.4のビルドが必要です。','Unity player revision or bridge format mismatch','boot',true);
+          return;
+        }
+        config=value;
+        if(window.RollStartup)RollStartup.unityRegistered();
+        ready();
+      },
       readFrame:()=>{if(!running||performance.now()-lastPoseAt>350){frame[2]=frame[35]=0;}return config&&config.frameFloatCount===39?frame:legacyFrame;},
       report:value=>{
         unityReport=value;placed=!!value.placed;

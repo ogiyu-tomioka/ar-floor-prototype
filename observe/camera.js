@@ -2,12 +2,23 @@
   'use strict';
   const face = new URLSearchParams(location.search).get('mode') === 'face';
   document.body.dataset.mode = face ? 'face' : 'paper';
+  const stage = document.getElementById('stage');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let scene = null, paperVisible = false, videoReady = false, descriptorReady = false;
-  let poseTimer = 0, yaw = 0;
+  let poseTimer = 0, yaw = 0, stopped = false;
+  const modelRequest = face ? new AbortController() : null;
 
   function notify(kind, detail) {
+    if (stopped) return;
     parent.postMessage({channel:'rbb-observation-camera', kind, detail}, location.origin);
+  }
+
+  function preloadScript(file) {
+    const preload = document.createElement('link');
+    preload.rel = 'preload';
+    preload.as = 'script';
+    preload.href = file;
+    document.head.appendChild(preload);
   }
 
   function loadScript(file) {
@@ -15,9 +26,18 @@
       const script = document.createElement('script');
       script.src = file;
       script.onload = resolve;
-      script.onerror = reject;
+      script.onerror = () => reject(Error('ファイルを読み込めませんでした: '+file));
       document.head.appendChild(script);
     });
+  }
+
+  function watchStream(video) {
+    const stream = video?.srcObject;
+    for (const track of stream?.getVideoTracks() || []) {
+      const ended = () => notify('error',{error:'CAMERA_ENDED'});
+      track.addEventListener('ended', ended, {once:true});
+      if (track.readyState === 'ended') ended();
+    }
   }
 
   function buildMonster(rig) {
@@ -73,6 +93,7 @@
       video.addEventListener('loadedmetadata', fitLayers);
       video.addEventListener('resize', fitLayers);
       window.addEventListener('resize', fitLayers);
+      watchStream(video);
       video.muted = true;
       video.play().catch(() => {});
       videoReady = true;
@@ -144,7 +165,10 @@
         this.head.visible=!this.atShoulder;
       },
     });
-    scene.addEventListener('rbbFaceVideo', () => notify('video'));
+    scene.addEventListener('rbbFaceVideo', () => {
+      watchStream(stage.querySelector('video'));
+      notify('video');
+    });
     scene.addEventListener('arReady', () => notify('scanning'));
     scene.addEventListener('arError', event => notify('error',event.detail));
     scene.addEventListener('targetFound', () => notify('found'));
@@ -152,6 +176,9 @@
   }
 
   function stopStreams() {
+    stopped = true;
+    clearTimeout(poseTimer);
+    modelRequest?.abort();
     if (scene && face) {
       const system = scene.systems && scene.systems['mindar-face-system'];
       if (system && system.video && system.video.srcObject) {
@@ -163,18 +190,36 @@
     });
   }
   window.addEventListener('pagehide', stopStreams);
+  stage.addEventListener('webglcontextlost', () => notify('error',{error:'WEBGL_CONTEXT_LOST'}), true);
   window.addEventListener('unhandledrejection', event =>
     notify('error',{error:'RUNTIME',detail:String(event.reason?.message||event.reason||'')}));
 
   async function init() {
     try {
+      const trackingScript = face?'vendor/mindar-face-aframe.prod.js?v=1.2.5-rbb3':'vendor/aframe-ar-nft.js?v=3.4.8-rbb2';
+      preloadScript(trackingScript);
+      if (face) {
+        // The tracker consumes the same request once its script and the scene have loaded.
+        const modelUrl = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+        window.rbbFaceModel = fetch(modelUrl,{signal:modelRequest.signal}).then(async response => {
+          if (!response.ok) throw Error('顔追跡モデル HTTP '+response.status);
+          const model = await response.arrayBuffer();
+          notify('progress',{stage:'face-model-ready'});
+          return model;
+        });
+        window.rbbFaceModel.catch(error => notify('error',{error:'FACE_INIT',detail:String(error)}));
+      }
       await loadScript('vendor/aframe.min.js?v=1.6.0');
-      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5-rbb2':'vendor/aframe-ar-nft.js?v=3.4.8-rbb2');
+      notify('progress',{stage:'aframe-ready'});
+      if (stopped) return;
+      await loadScript(trackingScript);
+      if (stopped) return;
+      notify('progress',{stage:'tracker-script-ready'});
       const fragment = document.getElementById(face?'face-scene':'paper-scene').content.cloneNode(true);
       scene = fragment.querySelector('a-scene');
       if (face) configureFace(fragment);
       else configurePaper(fragment);
-      document.getElementById('stage').appendChild(fragment);
+      stage.appendChild(fragment);
     } catch (error) {
       notify('error',{error:'LOAD',detail:String(error?.message||error||'')});
     }

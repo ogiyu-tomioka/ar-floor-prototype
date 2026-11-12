@@ -41,21 +41,22 @@
     }));
   }
   const fatalRuntime = value => /out of bounds|memory access|unreachable|RuntimeError|abort\(|aborted/i.test(String(value));
+  const downloadFailure = value => /fetch|network|download|load|通信|読み込|ファイル/i.test(String(value));
   function clear() {
     if(failure&&failure.fatal)return;
     failure = null; panel.hidden = true;
     document.body.classList.remove('roll-recovery-open');
   }
   function fail(message, detail, scope = 'ar', fatal = false, pending = false) {
-    if (failure && failure.fatal && !fatal) return;
+    if (failure && !fatal && (failure.fatal || failure.scope==='boot'&&scope!=='boot')) return;
     failure = {message, detail:String(detail || ''), scope, fatal, pending, stage:bootStage};
     history.push({time:new Date().toISOString(), ...failure}); if(history.length > 30) history.shift();
     if(window.RollCaptureBridge && RollCaptureBridge.suspend) RollCaptureBridge.suspend();
-    if(scope==='boot'&&!stopScheduled){
+    if(scope==='boot'&&!pending&&!stopScheduled){
       stopScheduled=true;
       setTimeout(()=>{
         stopScheduled=false;
-        if(failure&&failure.scope==='boot'&&window.FloorProbeBridge&&FloorProbeBridge.stopForFailure)
+        if(failure&&failure.scope==='boot'&&!failure.pending&&window.FloorProbeBridge&&FloorProbeBridge.stopForFailure)
           FloorProbeBridge.stopForFailure();
       },0);
     }
@@ -63,7 +64,7 @@
     document.getElementById('recovery-message').textContent = message;
     document.getElementById('recovery-detail').textContent = failure.detail || message;
     const versions=document.getElementById('roll-version');
-    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.28';
+    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.29';
     const permission = /NotAllowed|permission|denied|許可/i.test(failure.detail + message);
     document.getElementById('recovery-help').textContent = fatal
       ? 'ARとゲームの準備をやり直す必要があります。下のボタンでページを読み直してください。'
@@ -148,13 +149,20 @@
         const original=config[key];
         config[key]=function(message,type){
           if(original)original(message,type);
-          if(type==='error'||fatalRuntime(message))fail('ゲーム本体で異常が発生しました。',message,'boot',true);
+          if(fatalRuntime(message)||(type==='error'&&!downloadFailure(message)))
+            fail('ゲーム本体で異常が発生しました。',message,'boot',true);
         };
       }
       unityLoading=true;resetUnityWatchdog();
+      let progress=-1;
       try {
         unityInstance=await window.createUnityInstance(bootOptions.canvas,config,value=>{
-          resetUnityWatchdog();bootOptions.bridge.progress(value);
+          if(value>progress){
+            progress=value;
+            if(failure?.pending&&failure.scope==='boot')clear();
+            resetUnityWatchdog();
+          }
+          bootOptions.bridge.progress(value);
         });
         bootOptions.bridge.setUnity(unityInstance);
         return unityInstance;
@@ -163,7 +171,7 @@
       const e=reason instanceof Error ? reason : Error(String(reason));
       unityPromise=null;
       // A trapped/aborted runtime cannot be safely recreated in the same JavaScript context.
-      if(fatalRuntime(e)||!/fetch|network|download|load|通信|読み込|ファイル/i.test(String(e)))e.needsReload=true;
+      if(fatalRuntime(e)||!downloadFailure(e))e.needsReload=true;
       throw e;
     });
     return unityPromise;
@@ -179,11 +187,14 @@
       if(failure&&failure.fatal)return false;
       if(!failure||failure.scope==='boot')clear();
       stage('boot-ready');
-      clearTimeout(registrationTimer);
-      registrationTimer=setTimeout(()=>{
-        if(bootOptions.bridge.startupState&&!bootOptions.bridge.startupState().registered)
-          fail('ゲームの準備完了を確認できませんでした。','Unity registration missing after 12 seconds','boot',true);
-      },12000);
+      if(bootOptions.bridge.startupState&&!bootOptions.bridge.startupState().registered){
+        clearTimeout(registrationTimer);
+        registrationTimer=setTimeout(()=>{
+          if(!bootOptions.bridge.startupState().registered)
+            fail('ゲームの準備完了を確認できませんでした。','Unity registration missing after 12 seconds','boot',true);
+        },12000);
+      }
+      bootOptions.bridge.refreshReady?.();
       return true;
     }).catch(e=>{
       fail('捕獲ゲームを準備できませんでした。',e,'boot',!!e.needsReload);
@@ -200,6 +211,7 @@
       if(failure&&failure.fatal)return false;
       if(!bootOptions.paperFirst||captureRequested)return loadCapture();
       stage('paper-ready');
+      bootOptions.bridge.refreshReady?.();
       return true;
     }).catch(e=>{
       fail('用紙を読み取る準備ができませんでした。',e,'boot',!!e.needsReload);
@@ -219,7 +231,7 @@
   document.getElementById('recovery-diagnostic').addEventListener('click',()=>{
     const download=document.getElementById('download');
     if(window.FloorProbeBridge&&download){download.click();return;}
-    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.28',failure,history},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.29',failure,history},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='roll-by-blow-startup.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   });
@@ -232,7 +244,8 @@
   window.addEventListener('unhandledrejection',event=>{
     fail('開始処理で問題が発生しました。',event.reason,'boot',true);
   });
-  window.RollStartup={boot,loadCapture,fail,clear,snapshot:()=>({failure,history:history.slice(),bootStage,bootHistory:bootHistory.slice(),unityLoading,xrLoaded,
+  window.RollStartup={boot,loadCapture,fail,clear,unityRegistered:()=>clearTimeout(registrationTimer),
+    snapshot:()=>({failure,history:history.slice(),bootStage,bootHistory:bootHistory.slice(),unityLoading,xrLoaded,
       xrHasGlobal:!!window.XR8,xrControllerReady:!!(window.XR8&&window.XR8.XrController),resources:resourceSnapshot()}),
     pending:()=>!!failure,canResume:()=>!failure||!failure.fatal};
 }());

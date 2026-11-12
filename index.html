@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#102222">
   <title>Roll-by-Blow</title>
-  <link rel="stylesheet" href="probe.css?v=0.3.28">
+  <link rel="stylesheet" href="probe.css?v=0.3.29">
+  <link rel="preload" as="script" href="external/xr/xr.js">
 </head>
 <body>
   <canvas id="camera-canvas" aria-hidden="true"></canvas>
@@ -32,7 +33,7 @@
     </div>
     <details id="diagnostics">
       <summary>確認用の詳細</summary>
-      <p id="roll-version" class="note">ゲーム読み込み待ち / AR接続 0.3.28 / 画面 0.3.28</p>
+      <p id="roll-version" class="note">ゲーム読み込み待ち / AR接続 0.3.29 / 画面 0.3.29</p>
       <pre id="metrics">準備中</pre>
       <p class="note">診断に写真・映像は含まれません。</p>
       <button id="download">診断を保存</button>
@@ -54,7 +55,7 @@
         <a href="observe/">モンスター観察</a>
         <a href="observe/print.html">観察用紙</a>
       </nav>
-      <small class="permission-version">バージョン 0.3.28</small>
+      <small class="permission-version">バージョン 0.3.29</small>
     </div>
   </section>
   <noscript>この試作にはJavaScriptが必要です。</noscript>
@@ -62,17 +63,24 @@
        Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
        License and warranty disclaimer: external/xr/LICENSE -->
   <script type="importmap">{"imports":{"three":"./external/marker/three.module.js"}}</script>
-  <script src="startup-recovery.js?v=0.3.28"></script>
-  <script src="color-pose.js?v=0.3.6"></script>
-  <script src="paper-rotation-guard.js?v=0.3.24"></script>
-  <script src="color-provider.js?v=0.3.28"></script>
-  <script src="camera-orientation.js?v=0.3.4"></script>
-  <script src="pose-guard.js?v=0.3.4"></script>
-  <script src="table-placement.js?v=0.3.4"></script>
-  <script src="probe.js?v=0.3.24"></script>
-  <script src="roll-game.js?v=0.3.28"></script>
+  <script defer src="startup-recovery.js?v=0.3.29"></script>
+  <script defer src="color-pose.js?v=0.3.6"></script>
+  <script defer src="paper-rotation-guard.js?v=0.3.24"></script>
+  <script defer src="color-provider.js?v=0.3.29"></script>
+  <script defer src="camera-orientation.js?v=0.3.4"></script>
+  <script defer src="pose-guard.js?v=0.3.4"></script>
+  <script defer src="table-placement.js?v=0.3.4"></script>
+  <script defer src="probe.js?v=0.3.24"></script>
+  <script defer src="roll-game.js?v=0.3.29"></script>
   <script>
-    (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+      if (!window.RollStartup || !window.FloorProbeBridge) {
+        const message = '表示データを読み込めませんでした。通信を確認してください。';
+        document.getElementById('status').textContent = message;
+        if (window.RollStartup) RollStartup.fail(message, 'Startup bridge missing', 'boot', true);
+        else document.getElementById('start').textContent = 'ページを読み直してください';
+        return;
+      }
       const unityCanvas = document.getElementById('unity-canvas');
       // Scope alpha enforcement to Unity's own canvas; never patch the global prototype.
       const nativeGetContext = unityCanvas.getContext.bind(unityCanvas);
@@ -102,7 +110,7 @@
           paperFirst: FloorProbeBridge.canScanBeforeUnity === true,
           loaderUrl: 'Build/Web.loader.js'});
       }
-    }());
+    }, {once:true});
   </script>
 </body>
 </html>
