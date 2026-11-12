@@ -8,9 +8,18 @@ Licenses: ARJS-LICENSE.txt, ARTOOLKIT-LICENSE.txt, THREE-LICENSE.txt
 Roll-by-Blow 0.3.26 adaptation: initialize from the source video dimensions
 after metadata arrives, restart the worker when those dimensions change,
 and retain the NFT projection matrix for the rendering camera.
+Roll-by-Blow 0.3.27 adaptation: improve depth precision in the calibrated
+projection and apply the pose filter in nft-pose.js.
 
 MindAR.js 1.2.5 face build
 https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face-aframe.prod.js
 License: MINDAR-LICENSE.txt
-The upstream bundle loads MediaPipe Tasks Vision 0.10.9 and the Face Landmarker model
-at run time from their fixed upstream URLs.
+Roll-by-Blow 0.3.27 adaptation: wait for the first video frame, report
+startup errors, use a CPU fallback, and load the fixed MediaPipe
+Tasks Vision 0.10.9 runtime from the same site.
+The Face Landmarker model is loaded from the fixed upstream Google URL
+in the MindAR.js bundle.
+
+MediaPipe Tasks Vision 0.10.9 WebAssembly runtime
+https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm/
+License: mediapipe/MEDIAPIPE-LICENSE.txt

@@ -6,8 +6,8 @@
   let scene = null, paperVisible = false, videoReady = false, descriptorReady = false;
   let poseTimer = 0, yaw = 0;
 
-  function notify(kind) {
-    parent.postMessage({channel:'rbb-observation-camera', kind}, location.origin);
+  function notify(kind, detail) {
+    parent.postMessage({channel:'rbb-observation-camera', kind, detail}, location.origin);
   }
 
   function loadScript(file) {
@@ -115,8 +115,9 @@
   }
 
   function configureFace() {
+    scene.addEventListener('rbbFaceVideo', () => notify('video'));
     scene.addEventListener('arReady', () => notify('scanning'));
-    scene.addEventListener('arError', () => notify('error'));
+    scene.addEventListener('arError', event => notify('error',event.detail));
     scene.addEventListener('targetFound', () => notify('found'));
     scene.addEventListener('targetLost', () => notify('lost'));
   }
@@ -133,19 +134,20 @@
     });
   }
   window.addEventListener('pagehide', stopStreams);
-  window.addEventListener('unhandledrejection', () => notify('error'));
+  window.addEventListener('unhandledrejection', event =>
+    notify('error',{error:'RUNTIME',detail:String(event.reason?.message||event.reason||'')}));
 
   async function init() {
     try {
       await loadScript('vendor/aframe.min.js?v=1.6.0');
-      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5':'vendor/aframe-ar-nft.js?v=3.4.8-rbb1');
+      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5-rbb1':'vendor/aframe-ar-nft.js?v=3.4.8-rbb2');
       const fragment = document.getElementById(face?'face-scene':'paper-scene').content.cloneNode(true);
       scene = fragment.querySelector('a-scene');
       if (face) configureFace();
       else configurePaper(fragment);
       document.getElementById('stage').appendChild(fragment);
-    } catch (_) {
-      notify('error');
+    } catch (error) {
+      notify('error',{error:'LOAD',detail:String(error?.message||error||'')});
     }
   }
   init();

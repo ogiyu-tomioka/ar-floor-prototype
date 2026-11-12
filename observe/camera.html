@@ -34,17 +34,26 @@
       height:100% !important;
       margin:0 !important;
     }
+    body[data-mode="face"] #stage { isolation:isolate; }
+    body[data-mode="face"] #stage video {
+      z-index:0 !important;
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    body[data-mode="face"] #stage a-scene { position:absolute !important; z-index:1; }
   </style>
-  <script src="camera.js?v=0.3.26" defer></script>
+  <script src="nft-pose.js?v=0.3.27" defer></script>
+  <script src="camera.js?v=0.3.27" defer></script>
 </head>
 <body>
   <div id="stage"></div>
   <template id="paper-scene">
     <a-scene embedded vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:false"
       renderer="antialias:false; precision:medium; colorManagement:true">
-      <a-entity light="type:ambient; color:#ffffff; intensity:1.25"></a-entity>
-      <a-entity light="type:directional; color:#fff3de; intensity:1.65" position="-1 2 1"></a-entity>
-      <a-nft id="paper-anchor" type="nft" smooth="true" smooth-count="5" smooth-tolerance="0.01" smooth-threshold="2" hit-testing-enabled="false">
+      <a-entity light="type:ambient; color:#ffffff; intensity:0.9"></a-entity>
+      <a-entity light="type:directional; color:#fff3de; intensity:1.1" position="-1 2 1"></a-entity>
+      <a-nft id="paper-anchor" type="nft" hit-testing-enabled="false">
         <a-entity id="paper-center" position="67.5 0 -90">
           <a-circle radius="25" rotation="-90 0 0" position="0 .2 0"
             material="shader:flat; color:#132e32; opacity:.33; transparent:true"></a-circle>
@@ -53,7 +62,7 @@
           </a-entity>
         </a-entity>
       </a-nft>
-      <a-entity camera="near:0.1; far:4000" look-controls="enabled:false" wasd-controls="enabled:false"></a-entity>
+      <a-entity camera="near:12; far:3500" look-controls="enabled:false" wasd-controls="enabled:false"></a-entity>
     </a-scene>
   </template>
   <template id="face-scene">

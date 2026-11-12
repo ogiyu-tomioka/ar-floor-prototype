@@ -41,6 +41,11 @@ h1 { margin: 0 0 12px; font-size: clamp(1.35rem, 5.8vw, 1.9rem); }
 .intro-links, .live-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px 16px; margin-top: 12px; }
 .intro-links a, .live-links a, .live-links button { display: inline-flex; min-height: 42px; align-items: center; font-size: .91rem; }
 .intro small { color: var(--muted); }
+.diagnostic {
+  display:block; min-height:40px; margin-top:7px; padding:0;
+  color:var(--mint); border:0; background:none; font:inherit; font-size:.86rem;
+  text-decoration:underline; text-underline-offset:.23em; cursor:pointer;
+}
 .live-panel {
   position: fixed; z-index: 2; inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   padding: 14px; max-width: 510px; margin: auto; border: 1px solid var(--line); border-radius: 17px; background: var(--panel);
