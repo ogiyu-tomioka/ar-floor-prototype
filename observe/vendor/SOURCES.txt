@@ -19,6 +19,9 @@ startup errors, use a CPU fallback, and load the fixed MediaPipe
 Tasks Vision 0.10.9 runtime from the same site.
 The Face Landmarker model is loaded from the fixed upstream Google URL
 in the MindAR.js bundle.
+Roll-by-Blow 0.3.28 adaptation: initialize tracking while the front camera
+opens, fetch model bytes concurrently with the runtime, reuse those bytes
+for the CPU fallback, and skip unused blendshape scores.
 
 MediaPipe Tasks Vision 0.10.9 WebAssembly runtime
 https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm/

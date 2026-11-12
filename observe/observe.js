@@ -15,8 +15,8 @@
   const events = [];
   let camera = null, deadline = 0, found = false, sawVideo = false;
 
-  const scanText = face ? '前面カメラに顔全体を映してください。' : '観察用紙の全体を映してください。';
-  const foundText = face ? '顔をゆっくり動かして、耳や頬の模様を見てみよう。'
+  const scanText = face ? 'スマホを少し離し、顔と肩を映してください。' : '観察用紙の全体を映してください。';
+  const foundText = face ? '肩が入るようにスマホを構えてみよう。肩が画面から外れると、モンスターは頭の上に移ります。'
     : 'スマホをゆっくり動かして観察しよう。ボタンで向きやポーズも変えられます。';
 
   if (face) {
@@ -25,10 +25,17 @@
     document.getElementById('title').textContent = title;
     document.getElementById('live-title').textContent = title;
     document.getElementById('eyebrow').textContent = 'FIELD NOTE / EXTRA';
-    document.getElementById('intro-text').textContent = '前面カメラに顔を映すと、ミニモンスターの耳と頬の模様が現れます。顔を動かして変身を楽しもう。';
-    document.getElementById('engine-label').textContent = 'MindAR.js / 顔追跡 · 0.3.27';
+    document.getElementById('intro-text').textContent = '前面カメラに顔と肩を映すと、ミニモンスターが肩に乗ります。';
+    document.getElementById('engine-label').textContent = 'MindAR.js / 顔追跡 · 0.3.28';
     document.getElementById('print-link').hidden = true;
     document.getElementById('pose-controls').hidden = true;
+    for(const file of ['vendor/aframe.min.js?v=1.6.0','vendor/mindar-face-aframe.prod.js?v=1.2.5-rbb2']){
+      const preload=document.createElement('link');
+      preload.rel='preload';
+      preload.as='script';
+      preload.href=file;
+      document.head.appendChild(preload);
+    }
     for (const id of ['alternate-link', 'live-alternate']) {
       const link = document.getElementById(id);
       link.href = './';
@@ -69,7 +76,7 @@
     camera = document.createElement('iframe');
     camera.title = face ? '変身カメラ' : '観察カメラ';
     camera.allow = 'camera';
-    camera.src = 'camera.html?v=0.3.27' + (face ? '&mode=face' : '');
+    camera.src = 'camera.html?v=0.3.28' + (face ? '&mode=face' : '');
     host.appendChild(camera);
     setDeadline();
   }
@@ -123,7 +130,7 @@
   defend.addEventListener('click', () => pose('defend'));
   document.getElementById('stop-camera').addEventListener('click', () => stop());
   diagnostic.addEventListener('click', () => {
-    const data={revision:'0.3.27',mode:face?'face':'observation',page:location.href,userAgent:navigator.userAgent,events};
+    const data={revision:'0.3.28',mode:face?'face':'observation',page:location.href,userAgent:navigator.userAgent,events};
     const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
     const link=document.createElement('a');
     link.href=url;

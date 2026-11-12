@@ -7,11 +7,12 @@
     + '<p id="recovery-message"></p><p id="recovery-help" class="note"></p>'
     + '<button id="recovery-retry" class="primary">もう一度開始する</button>'
     + '<button id="recovery-reload">ページを読み直す</button>'
+    + '<nav class="permission-mode-links" aria-label="直接開く"><a href="observe/">モンスター観察</a><a href="observe/?mode=face">モンスターに変身</a></nav>'
     + '<details><summary>詳しい原因</summary><p id="recovery-version" class="note"></p><pre id="recovery-detail"></pre>'
     + '<button id="recovery-diagnostic">診断を保存</button></details></div>';
   document.body.appendChild(panel);
   const retry = document.getElementById('recovery-retry');
-  let failure = null, bootOptions = null, bootPromise = null;
+  let failure = null, bootOptions = null, bootPromise = null, captureRequested = false, captureBoot = null;
   let unityInstance = null, unityPromise = null, enginePromise = null, xrLoaded = !!(window.XR8 && window.XR8.XrController);
   let unityLoading = false, unityStallTimer = 0, registrationTimer = 0, stopScheduled = false;
   const history = [], bootHistory = [];
@@ -62,7 +63,7 @@
     document.getElementById('recovery-message').textContent = message;
     document.getElementById('recovery-detail').textContent = failure.detail || message;
     const versions=document.getElementById('roll-version');
-    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.27';
+    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.28';
     const permission = /NotAllowed|permission|denied|許可/i.test(failure.detail + message);
     document.getElementById('recovery-help').textContent = fatal
       ? 'ARとゲームの準備をやり直す必要があります。下のボタンでページを読み直してください。'
@@ -167,13 +168,11 @@
     });
     return unityPromise;
   }
-  function boot(options) {
-    if(options)bootOptions=options;
+  function loadCapture() {
     if(failure&&failure.fatal)return Promise.resolve(false);
-    if(bootPromise)return bootPromise;
-    clear();
-    bootPromise=ensureEngine().then(()=>{
-      if(failure&&failure.fatal)return;
+    if(captureBoot)return captureBoot;
+    captureRequested=true;
+    captureBoot=Promise.resolve().then(()=>{
       stage('unity-runtime','ゲームを読み込んでいます…');
       return ensureUnity();
     }).then(()=>{
@@ -187,7 +186,23 @@
       },12000);
       return true;
     }).catch(e=>{
-      fail('ゲームを準備できませんでした。',e,'boot',!!e.needsReload);
+      fail('捕獲ゲームを準備できませんでした。',e,'boot',!!e.needsReload);
+      return false;
+    }).finally(()=>{captureBoot=null;});
+    return captureBoot;
+  }
+  function boot(options) {
+    if(options)bootOptions=options;
+    if(failure&&failure.fatal)return Promise.resolve(false);
+    if(bootPromise)return bootPromise;
+    clear();
+    bootPromise=ensureEngine().then(()=>{
+      if(failure&&failure.fatal)return false;
+      if(!bootOptions.paperFirst||captureRequested)return loadCapture();
+      stage('paper-ready');
+      return true;
+    }).catch(e=>{
+      fail('用紙を読み取る準備ができませんでした。',e,'boot',!!e.needsReload);
       return false;
     }).finally(()=>{bootPromise=null;});
     return bootPromise;
@@ -204,7 +219,7 @@
   document.getElementById('recovery-diagnostic').addEventListener('click',()=>{
     const download=document.getElementById('download');
     if(window.FloorProbeBridge&&download){download.click();return;}
-    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.27',failure,history},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.28',failure,history},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='roll-by-blow-startup.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   });
@@ -217,7 +232,7 @@
   window.addEventListener('unhandledrejection',event=>{
     fail('開始処理で問題が発生しました。',event.reason,'boot',true);
   });
-  window.RollStartup={boot,fail,clear,snapshot:()=>({failure,history:history.slice(),bootStage,bootHistory:bootHistory.slice(),unityLoading,xrLoaded,
+  window.RollStartup={boot,loadCapture,fail,clear,snapshot:()=>({failure,history:history.slice(),bootStage,bootHistory:bootHistory.slice(),unityLoading,xrLoaded,
       xrHasGlobal:!!window.XR8,xrControllerReady:!!(window.XR8&&window.XR8.XrController),resources:resourceSnapshot()}),
     pending:()=>!!failure,canResume:()=>!failure||!failure.fatal};
 }());

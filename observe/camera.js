@@ -114,7 +114,36 @@
     });
   }
 
-  function configureFace() {
+  function configureFace(fragment) {
+    buildMonster(fragment.querySelector('#shoulder-monster'));
+    buildMonster(fragment.querySelector('#head-monster'));
+    AFRAME.registerComponent('rbb-companion',{
+      init() {
+        this.shoulder=this.el.querySelector('#shoulder-monster').object3D;
+        this.head=this.el.querySelector('#head-monster').object3D;
+        this.point=new AFRAME.THREE.Vector3();
+        this.samples=[[-.15,.04],[.15,.04],[0,.49]];
+        this.next=0;
+        this.atShoulder=true;
+      },
+      tick(clock) {
+        if(clock<this.next||!this.el.camera||!this.shoulder.parent.visible)return;
+        this.next=clock+100;
+        const rect=this.el.getBoundingClientRect();
+        const width=document.documentElement.clientWidth;
+        const height=document.documentElement.clientHeight;
+        const margin=this.atShoulder?10:24;
+        this.atShoulder=this.samples.every(([x,y])=>{
+          this.point.set(x,y,0);
+          this.shoulder.localToWorld(this.point).project(this.el.camera);
+          const px=rect.left+(this.point.x+1)*rect.width/2;
+          const py=rect.top+(1-this.point.y)*rect.height/2;
+          return this.point.z>=-1&&this.point.z<=1&&px>margin&&px<width-margin&&py>65+margin&&py<height-115-margin;
+        });
+        this.shoulder.visible=this.atShoulder;
+        this.head.visible=!this.atShoulder;
+      },
+    });
     scene.addEventListener('rbbFaceVideo', () => notify('video'));
     scene.addEventListener('arReady', () => notify('scanning'));
     scene.addEventListener('arError', event => notify('error',event.detail));
@@ -140,10 +169,10 @@
   async function init() {
     try {
       await loadScript('vendor/aframe.min.js?v=1.6.0');
-      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5-rbb1':'vendor/aframe-ar-nft.js?v=3.4.8-rbb2');
+      await loadScript(face?'vendor/mindar-face-aframe.prod.js?v=1.2.5-rbb2':'vendor/aframe-ar-nft.js?v=3.4.8-rbb2');
       const fragment = document.getElementById(face?'face-scene':'paper-scene').content.cloneNode(true);
       scene = fragment.querySelector('a-scene');
-      if (face) configureFace();
+      if (face) configureFace(fragment);
       else configurePaper(fragment);
       document.getElementById('stage').appendChild(fragment);
     } catch (error) {

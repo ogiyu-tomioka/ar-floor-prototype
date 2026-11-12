@@ -43,8 +43,8 @@
     }
     body[data-mode="face"] #stage a-scene { position:absolute !important; z-index:1; }
   </style>
-  <script src="nft-pose.js?v=0.3.27" defer></script>
-  <script src="camera.js?v=0.3.27" defer></script>
+  <script src="nft-pose.js?v=0.3.28" defer></script>
+  <script src="camera.js?v=0.3.28" defer></script>
 </head>
 <body>
   <div id="stage"></div>
@@ -66,29 +66,17 @@
     </a-scene>
   </template>
   <template id="face-scene">
-    <a-scene embedded mindar-face="uiLoading:no; uiScanning:no; uiError:no"
+    <a-scene embedded mindar-face="uiLoading:no; uiScanning:no; uiError:no" rbb-companion
       vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:false"
       renderer="antialias:false; precision:medium; colorManagement:true">
       <a-camera active="false" look-controls="enabled:false"></a-camera>
       <a-entity light="type:ambient; color:#fff; intensity:1.2"></a-entity>
       <a-entity light="type:directional; color:#fff3de; intensity:1.6" position="-1 2 1"></a-entity>
+      <a-entity mindar-face-target="anchorIndex:152">
+        <a-entity id="shoulder-monster" position=".92 -.47 -.28" scale="1.05 1.05 1.05" visible="false"></a-entity>
+      </a-entity>
       <a-entity mindar-face-target="anchorIndex:10">
-        <a-entity position="-.28 .18 -.055" rotation="0 0 24">
-          <a-sphere radius=".14" scale=".82 1.33 .64" color="#28a987" segments-width="18" segments-height="12"></a-sphere>
-          <a-sphere radius=".09" position="0 .015 .066" scale=".75 1.22 .36" color="#a8ebbc" segments-width="16" segments-height="10"></a-sphere>
-        </a-entity>
-        <a-entity position=".28 .18 -.055" rotation="0 0 -24">
-          <a-sphere radius=".14" scale=".82 1.33 .64" color="#28a987" segments-width="18" segments-height="12"></a-sphere>
-          <a-sphere radius=".09" position="0 .015 .066" scale=".75 1.22 .36" color="#a8ebbc" segments-width="16" segments-height="10"></a-sphere>
-        </a-entity>
-      </a-entity>
-      <a-entity mindar-face-target="anchorIndex:50">
-        <a-sphere radius=".061" position="0 0 .025" scale="1.1 .54 .34" color="#39ba98" segments-width="16" segments-height="10"></a-sphere>
-        <a-sphere radius=".025" position=".082 -.026 .024" scale="1 .72 .42" color="#f4ca73" segments-width="12" segments-height="8"></a-sphere>
-      </a-entity>
-      <a-entity mindar-face-target="anchorIndex:280">
-        <a-sphere radius=".061" position="0 0 .025" scale="1.1 .54 .34" color="#39ba98" segments-width="16" segments-height="10"></a-sphere>
-        <a-sphere radius=".025" position="-.082 -.026 .024" scale="1 .72 .42" color="#f4ca73" segments-width="12" segments-height="8"></a-sphere>
+        <a-entity id="head-monster" position="0 .04 -.13" scale=".88 .88 .88" visible="false"></a-entity>
       </a-entity>
     </a-scene>
   </template>

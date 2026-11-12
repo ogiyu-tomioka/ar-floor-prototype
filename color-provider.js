@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.27',maximumImageGapMs=2000;
+    const webRevision='0.3.28',maximumImageGapMs=2000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
@@ -197,7 +197,7 @@
       catch(e){record('unity-message-error',String(e));unity=null;config=null;if(window.RollStartup)RollStartup.fail('ゲーム本体との接続が切れました。',e,'boot',true);}
     }
     function ready(){
-      if(unity&&config&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
+      if((chooseByPaper||unity&&config)&&layout&&targets.length&&engineReady&&!error&&!running&&!starting){
         state.phase='ready';ui.start.disabled=false;ui.start.hidden=false;ui.start.textContent=imageOnly?'許可して比較を始める':observationTarget?'許可して用紙を読む':'許可して始める';
         ui.loading.hidden=true;ui.status.textContent='準備できました。';ui.phase.textContent='開始前';
       }
@@ -248,8 +248,15 @@
       if(!RollColorPose.cameraInBoard(sample,candidate,Number(sizeInput.value)/100)){
         record('image-pose-rejected',{name:d.name,scale:d.scale,scaledWidth:d.scaledWidth});return;
       }
+      const captureJustSelected=modeChoice!=='capture';
       modeChoice='capture';
       observationSeenAt=null;
+      if(captureJustSelected&&chooseByPaper&&!(unity&&config)&&window.RollStartup){
+        const token=session;
+        setTimeout(()=>{
+          if(token===session&&modeChoice==='capture')RollStartup.loadCapture();
+        },0);
+      }
       const wasVisible=visibleTargets.has(d.name);visibleTargets.add(d.name);targetAnchors.set(d.name,candidate);
       if(!anchor||anchor.name===d.name||!visibleTargets.has(anchor.name)||performance.now()-lastAnchorAt>200){anchor=candidate;lastAnchorAt=candidate.updatedAt;}
       imageVisible=visibleTargets.has(anchor.name);if(imageVisible)imageLostAt=0;tracking.imageUpdates++;
@@ -306,14 +313,16 @@
         frame[38]=screen.orientation&&finite(screen.orientation.angle)?screen.orientation.angle:(window.orientation||0);
         tracking.source=rotationBlocked?'paper-rotated':imageVisible?(imageOnly?'image-direct':'image-and-world'):'world-continuation';
         if(imageVisible)tracking.imageFrames++;else tracking.worldFrames++;
-        if(usable&&!placed&&clock-placementAt>500){placementAt=clock;send('PlaceFromMarker',JSON.stringify({position:{x:0,y:0,z:0},sizeMeters:Number(sizeInput.value)/100}));}
+        if(usable&&unity&&config&&!placed&&clock-placementAt>500){placementAt=clock;send('PlaceFromMarker',JSON.stringify({position:{x:0,y:0,z:0},sizeMeters:Number(sizeInput.value)/100}));}
       }else{tracking.source=anchor?(!imageVisible&&lostAgeMs>maximumImageGapMs?'image-required':'tracking-unavailable'):'waiting-for-image';tracking.limitedFrames++;}
       if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
       samplePose(clock,valid?camera:null,pose,imageFresh);
-      setText(ui.phase,usable?'プレイ中':anchor?'一時停止':'認識中');
+      const waitingForGame=modeChoice==='capture'&&!(unity&&config);
+      setText(ui.phase,waitingForGame?'ゲーム準備中':usable?'プレイ中':anchor?'一時停止':'認識中');
       const recovery=reacquisitionState();
       const scanInstruction=observationTarget&&!modeChoice?'捕獲用紙か観察用紙を1枚映してください。':'用紙の枠全体を映してください';
-      setText(ui.status,recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':scanInstruction));
+      setText(ui.status,waitingForGame?'捕獲ゲームを読み込んでいます。用紙を映したままお待ちください。':
+        recovery.message||(usable&&imageVisible?'カラー用紙を基準に追跡しています。':scanInstruction));
       if(!anchor&&clock-recognitionWaitAt>25000){recognitionWaitAt=Infinity;deferFailure('用紙を認識できませんでした。枠全体と明るさを確認して、もう一度開始してください。');}
     }
     function trackingTargets(){
@@ -358,7 +367,7 @@
       }]);added=true;
     }
     async function start(){
-      if(starting||running||!unity||!config||!engineReady)return;
+      if(starting||running||!engineReady||(!chooseByPaper&&!(unity&&config)))return;
       resetPaperRotation();resetReacquisition();starting=true;error='';ui.start.disabled=true;ui.status.textContent='カメラとモーションの利用を確認しています。';if(window.RollStartup)RollStartup.clear();const token=++session;
       try{
         if(!isSecureContext||!navigator.mediaDevices)throw Error('HTTPSのSafariで開いてください。');
@@ -512,9 +521,9 @@
     }
   }
     return {
-      webRevision,renderPerformance:performanceSnapshot,
+      webRevision,canScanBeforeUnity:chooseByPaper,renderPerformance:performanceSnapshot,
       retryReady:()=>{error='';prepareData();},
-      retryStart:()=>{stop();error='';if(!unity||!config||!engineReady){ready();if(window.RollStartup)RollStartup.fail('まだゲームの準備が完了していません。','Boot resources are not ready','boot');return;}dataAttempt++;dataLoaded=false;readyData=null;start();},
+      retryStart:()=>{stop();error='';if(!engineReady||(!chooseByPaper&&!(unity&&config))){ready();if(window.RollStartup)RollStartup.fail('まだゲームの準備が完了していません。','Boot resources are not ready','boot');return;}dataAttempt++;dataLoaded=false;readyData=null;start();},
       stopForFailure:stop,
       startupState:()=>({registered:!!config,engineReady,dataLoaded,starting,running}),
       pixelRatio:1,captureContext:(kind,gl)=>{if(gl&&/webgl/.test(kind))installUnityAlphaGuard(gl);},

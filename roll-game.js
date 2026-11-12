@@ -249,7 +249,7 @@
       if (hasAim) shadeWindGuide(value, force);
       if (versionNote) {
         const arVersion = window.FloorProbeBridge && FloorProbeBridge.webRevision || '従来モード';
-        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.27';
+        const versions = 'ゲーム ' + (value.gameplayRevision || '—') + ' / AR接続 ' + arVersion + ' / 画面 0.3.28';
         if (versionNote.textContent !== versions) versionNote.textContent = versions;
       }
       const needsPaper = window.FloorProbeBridge && FloorProbeBridge.paperNeedsView && FloorProbeBridge.paperNeedsView();
