@@ -15,6 +15,7 @@
   let failure = null, bootOptions = null, bootPromise = null, captureRequested = false, captureBoot = null;
   let unityInstance = null, unityPromise = null, enginePromise = null, xrLoaded = !!(window.XR8 && window.XR8.XrController);
   let unityLoading = false, unityStallTimer = 0, registrationTimer = 0, stopScheduled = false;
+  let trackingImportFailed = false;
   const history = [], bootHistory = [];
   let bootStage = 'idle';
   function stage(name, label) {
@@ -35,13 +36,14 @@
   }
   function resourceSnapshot() {
     if(typeof performance.getEntriesByType!=='function')return [];
-    return performance.getEntriesByType('resource').filter(e=>/\/(external\/xr|Build)\//.test(e.name)).slice(-20).map(e=>({
+    return performance.getEntriesByType('resource').filter(e=>/\/(external\/xr|Build|paper|observe\/targets)\//.test(e.name)).slice(-30).map(e=>({
       path:new URL(e.name,location.href).pathname,durationMs:Math.round(e.duration),
       transferSize:e.transferSize,encodedBodySize:e.encodedBodySize,responseStatus:e.responseStatus
     }));
   }
   const fatalRuntime = value => /out of bounds|memory access|unreachable|RuntimeError|abort\(|aborted/i.test(String(value));
   const downloadFailure = value => /fetch|network|download|load|通信|読み込|ファイル/i.test(String(value));
+  const moduleLoadFailure = value => /importing a module script failed|dynamically imported module|error loading module script/i.test(String(value));
   function clear() {
     if(failure&&failure.fatal)return;
     failure = null; panel.hidden = true;
@@ -64,10 +66,12 @@
     document.getElementById('recovery-message').textContent = message;
     document.getElementById('recovery-detail').textContent = failure.detail || message;
     const versions=document.getElementById('roll-version');
-    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.29';
+    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.30';
     const permission = /NotAllowed|permission|denied|許可/i.test(failure.detail + message);
     document.getElementById('recovery-help').textContent = fatal
-      ? 'ARとゲームの準備をやり直す必要があります。下のボタンでページを読み直してください。'
+      ? failure.stage==='xr-tracking'
+        ? '通信を確認し、下のボタンでページを読み直してください。'
+        : 'ARとゲームの準備をやり直す必要があります。下のボタンでページを読み直してください。'
       : pending ? '読み込みの完了を待っています。長く変わらない場合は、下のボタンで読み直せます。'
       : permission ? 'Safariでカメラとモーションの利用を許可してください。拒否を保存した場合はSafari側の設定変更が必要です。'
       : '通信や用紙の状態を確認して、そのまま再試行できます。';
@@ -120,7 +124,22 @@
       catch(e){const error=e instanceof Error?e:Error(String(e));error.needsReload=true;throw error;}
       if(!xr.XrController) {
         stage('xr-tracking','用紙を追跡する機能を準備しています…');
-        await deadline(xr.loadChunk('slam'),60000,'ARの追跡機能の準備が時間内に完了しませんでした。',true);
+        const started = performance.now();
+        try {
+          await deadline(xr.loadChunk('slam'),60000,'ARの追跡機能の準備が時間内に完了しませんでした。',true);
+          trackingImportFailed=false;
+        } catch(cause) {
+          if(!moduleLoadFailure(cause))throw cause;
+          const elapsedMs=Math.round(performance.now()-started);
+          const error=Error('external/xr/xr-slam.js · '+elapsedMs+' ms · '+String(cause));
+          // An immediate repeat of the same import failure may be retained by this document.
+          error.needsReload=trackingImportFailed&&elapsedMs<500;
+          error.startupMessage=error.needsReload
+            ? 'ARの追跡用ファイルが再試行でも読み込めませんでした。'
+            : 'ARの追跡用ファイルを読み込めませんでした。';
+          trackingImportFailed=true;
+          throw error;
+        }
       }
       if(!xr.XrController){const e=Error('ARの追跡機能を読み込めませんでした。');e.needsReload=true;throw e;}
       xrLoaded=true;stage('xr-ready');
@@ -214,7 +233,7 @@
       bootOptions.bridge.refreshReady?.();
       return true;
     }).catch(e=>{
-      fail('用紙を読み取る準備ができませんでした。',e,'boot',!!e.needsReload);
+      fail(e.startupMessage||'用紙を読み取る準備ができませんでした。',e,'boot',!!e.needsReload);
       return false;
     }).finally(()=>{bootPromise=null;});
     return bootPromise;
@@ -231,7 +250,7 @@
   document.getElementById('recovery-diagnostic').addEventListener('click',()=>{
     const download=document.getElementById('download');
     if(window.FloorProbeBridge&&download){download.click();return;}
-    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.29',failure,history},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.30',failure,history},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='roll-by-blow-startup.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   });

@@ -2,8 +2,9 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.29',maximumImageGapMs=2000;
+    const webRevision='0.3.30',maximumImageGapMs=2000;
     const captureDataRevision='0.3.17',observationDataRevision='0.3.25';
+    const captureRequestTimeoutMs=30000,observationRequestTimeoutMs=4000;
     const query=new URLSearchParams(location.search);
     const imageOnly=query.get('tracking')==='color-image';
     const targetMode=query.get('target')==='paper'?'paper':'frame';
@@ -101,32 +102,40 @@
     const tracking={source:'waiting-for-image',imageUpdates:0,worldFrames:0,imageFrames:0,limitedFrames:0,
       rawStatus:'',metersPerWorldUnit:null,cameraInBoard:null,imageFound:0,imageLost:0,sourceChanges:0};
     const finite=value=>typeof value==='number'&&Number.isFinite(value);
-    function loadReferenceImage(target,timeoutMs=15000){
+    function loadReferenceImage(target,timeoutMs=captureRequestTimeoutMs){
       return new Promise((resolve,reject)=>{
         const img=new Image();
         const finish=e=>{clearTimeout(timer);img.onload=img.onerror=null;if(e)reject(e);else resolve();};
-        const timer=setTimeout(()=>finish(Error('認識用の画像の読み込みが時間内に完了しませんでした。')),timeoutMs);
+        const path=new URL(target.imagePath,location.href).pathname;
+        const timer=setTimeout(()=>finish(Error('認識画像 '+path+' の取得が '+timeoutMs/1000+' 秒でタイムアウトしました。')),timeoutMs);
         img.onload=()=>{
           if(img.naturalWidth!==480||img.naturalHeight!==640){finish(Error('認識画像の構成が一致しません。同じ更新フォルダーの中身を公開してください。'));return;}
           record('target-image-ready',{name:target.name,width:img.naturalWidth,height:img.naturalHeight});finish();
         };
-        img.onerror=()=>finish(Error('認識用の画像を取得できません。paper/image-targetsを確認してください。'));
+        img.onerror=()=>finish(Error('認識画像 '+path+' を取得できません。'));
         img.src=target.imagePath;
       });
     }
-    async function fetchJson(url,timeoutMs=15000,cache='default'){
+    async function fetchJson(url,timeoutMs=captureRequestTimeoutMs,cache='default'){
       const controller=new AbortController();
       const timer=setTimeout(()=>controller.abort(),timeoutMs);
-      try{const r=await fetch(url,{cache,signal:controller.signal});if(!r.ok)throw Error('認識データを取得できません: '+r.status);return await r.json();}
+      try {
+        const response=await fetch(url,{cache,signal:controller.signal});
+        if(!response.ok)throw Error('HTTP '+response.status);
+        return await response.json();
+      } catch(cause) {
+        const reason=controller.signal.aborted ? timeoutMs/1000+' 秒でタイムアウト' : String(cause);
+        throw Error(url+' · '+reason);
+      }
       finally{clearTimeout(timer);}
     }
     async function loadObservationTarget(){
       if(!chooseByPaper)return null;
       try{
-        const target=await fetchJson('observe/targets/'+observationName+'.json?v='+observationDataRevision,3000);
+        const target=await fetchJson('observe/targets/'+observationName+'.json?v='+observationDataRevision,observationRequestTimeoutMs);
         if(target.name!==observationName)throw Error('観察用紙の名前が一致しません。');
         target.imagePath=new URL(target.imagePath,location.href).href;
-        await loadReferenceImage(target,3000);
+        await loadReferenceImage(target,observationRequestTimeoutMs);
         return target;
       }catch(error){
         record('observation-routing-unavailable',String(error));
@@ -139,9 +148,9 @@
       const cache=dataFailures?'reload':'default';
       readyData=(async()=>{
         const layoutFile=targetMode==='frame'?'paper/stage-layout-frame-0.3.17.json':'paper/stage-layout.json';
-        const captureData=fetchJson(layoutFile+'?v='+captureDataRevision,15000,cache).then(async paper=>{
+        const captureData=fetchJson(layoutFile+'?v='+captureDataRevision,captureRequestTimeoutMs,cache).then(async paper=>{
           if(!Array.isArray(paper.targets)||!paper.targets.length)throw Error('用紙の認識設定がありません。');
-          const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+captureDataRevision,15000,cache)));
+          const data=await Promise.all(paper.targets.map(t=>fetchJson(t.data+'?v='+captureDataRevision,captureRequestTimeoutMs,cache)));
           for(const target of data){
             const url=new URL(target.imagePath,location.href);
             url.searchParams.set('v',captureDataRevision);
@@ -539,7 +548,9 @@
       retryReady:()=>{error='';prepareData();ready();},
       refreshReady:ready,
       retryStart:()=>{stop();error='';if(!engineReady||(!chooseByPaper&&!(unity&&config))){prepareData();return;}start();},
-      stopForFailure:stop,
+      stopForFailure:()=>{
+        stop();state.phase='error';ui.phase.textContent='エラー';
+      },
       startupState:()=>({registered:!!config,engineReady,dataLoaded,starting,running}),
       pixelRatio:1,captureContext:(kind,gl)=>{if(gl&&/webgl/.test(kind))installUnityAlphaGuard(gl);},
       progress:value=>{ui.progress.style.width=Math.round(value*100)+'%';},
