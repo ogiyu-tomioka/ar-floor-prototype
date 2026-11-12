@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   window.RollColorBridge=function(){
-    const webRevision='0.3.30',maximumImageGapMs=2000;
+    const webRevision='0.3.31',maximumImageGapMs=2000;
     const captureDataRevision='0.3.17',observationDataRevision='0.3.25';
     const captureRequestTimeoutMs=30000,observationRequestTimeoutMs=4000;
     const query=new URLSearchParams(location.search);
@@ -248,6 +248,7 @@
       observationSeenAt=null;modeChoice='';handoffPending=false;
       send('ClearPlacement');sizeInput.disabled=false;
       ui.stop.disabled=ui.replace.disabled=ui.recenter.disabled=true;ui.start.hidden=false;
+      ui.loading.hidden=true;
       state.phase='stopped';ready();
     }
     function fail(message,cause){error=message+(cause?' '+String(cause.message||cause):'');stop();state.phase='error';ui.phase.textContent='エラー';ui.status.textContent=message;record('error',error);if(window.RollStartup)RollStartup.fail(message,cause||message,'ar');}
@@ -336,6 +337,7 @@
       if(tracking.source!==lastMode){lastMode=tracking.source;tracking.sourceChanges++;record('tracking-mode',{source:lastMode,rawStatus:tracking.rawStatus});}
       samplePose(clock,valid?camera:null,pose,imageFresh);
       const waitingForGame=modeChoice==='capture'&&!(unity&&config);
+      ui.loading.toggleAttribute('hidden',!waitingForGame);
       setText(ui.phase,waitingForGame?'ゲーム準備中':usable?'プレイ中':anchor?'一時停止':'認識中');
       const recovery=reacquisitionState();
       const scanInstruction=observationTarget&&!modeChoice?'捕獲用紙か観察用紙を1枚映してください。':'用紙の枠全体を映してください';
@@ -376,6 +378,7 @@
           // Set the active image data once after all pipeline modules have attached as well.
           XR8.XrController.configure({imageTargetData:trackingTargets()});
           state.cameraFeed.manualError='';
+          ui.loading.hidden=true;
           state.phase='running';starting=false;running=true;startLoop();record('camera-start',{width:result.canvasWidth,height:result.canvasHeight});
         },
         onUpdate:update,onProcessGpu:inspectCameraFrame,onRender:drawCameraFrame,
@@ -388,6 +391,8 @@
     async function start(){
       if(starting||running||!engineReady||(!chooseByPaper&&!(unity&&config)))return;
       resetPaperRotation();resetReacquisition();starting=true;error='';ui.start.disabled=true;ui.status.textContent='カメラとモーションの利用を確認しています。';if(window.RollStartup)RollStartup.clear();const token=++session;
+      ui.start.textContent='利用許可を確認中…';
+      ui.loading.classList.add('loading-motion');ui.progress.style.width='0%';ui.loading.hidden=false;
       try{
         if(!isSecureContext||!navigator.mediaDevices)throw Error('HTTPSのSafariで開いてください。');
         const width=Number(sizeInput.value)/100;if(!finite(width)||width<.05||width>.6)throw Error('カラー枠の実測した外幅を5〜60cmで入力してください。');
@@ -553,7 +558,11 @@
       },
       startupState:()=>({registered:!!config,engineReady,dataLoaded,starting,running}),
       pixelRatio:1,captureContext:(kind,gl)=>{if(gl&&/webgl/.test(kind))installUnityAlphaGuard(gl);},
-      progress:value=>{ui.progress.style.width=Math.round(value*100)+'%';},
+      progress:value=>{
+        const indeterminate=!(value>0&&value<1);
+        ui.loading.classList.toggle('loading-motion',indeterminate);
+        if(!indeterminate)ui.progress.style.width=Math.round(value*100)+'%';
+      },
       banner:(message,type)=>record('unity-'+type,String(message)),fail,
       setUnity:instance=>{unity=instance;record('unity-ready',true);ready();},
       register:value=>{

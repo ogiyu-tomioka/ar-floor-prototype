@@ -4,7 +4,7 @@
   panel.id = 'roll-recovery'; panel.hidden = true;
   panel.setAttribute('role', 'alert');
   panel.innerHTML = '<div class="recovery-card"><h2 id="recovery-title">開始できませんでした</h2>'
-    + '<p id="recovery-message"></p><p id="recovery-help" class="note"></p>'
+    + '<p id="recovery-message"></p><div class="loading loading-motion" id="recovery-loading" aria-hidden="true" hidden></div><p id="recovery-help" class="note"></p>'
     + '<button id="recovery-retry" class="primary">もう一度開始する</button>'
     + '<button id="recovery-reload">ページを読み直す</button>'
     + '<nav class="permission-mode-links" aria-label="直接開く"><a href="observe/">モンスター観察</a><a href="observe/?mode=face">モンスターに変身</a></nav>'
@@ -62,11 +62,12 @@
           FloorProbeBridge.stopForFailure();
       },0);
     }
-    document.getElementById('recovery-title').textContent = '開始・継続できませんでした';
+    document.getElementById('recovery-title').textContent = pending ? '読み込み中' : '開始・継続できませんでした';
     document.getElementById('recovery-message').textContent = message;
+    document.getElementById('recovery-loading').hidden = !pending;
     document.getElementById('recovery-detail').textContent = failure.detail || message;
     const versions=document.getElementById('roll-version');
-    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.30';
+    document.getElementById('recovery-version').textContent=versions?versions.textContent:'画面 0.3.31';
     const permission = /NotAllowed|permission|denied|許可/i.test(failure.detail + message);
     document.getElementById('recovery-help').textContent = fatal
       ? failure.stage==='xr-tracking'
@@ -250,7 +251,7 @@
   document.getElementById('recovery-diagnostic').addEventListener('click',()=>{
     const download=document.getElementById('download');
     if(window.FloorProbeBridge&&download){download.click();return;}
-    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.30',failure,history},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({uiRevision:'0.3.31',failure,history},null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='roll-by-blow-startup.json';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   });

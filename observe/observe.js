@@ -8,6 +8,7 @@
   const status = document.getElementById('status');
   const phase = document.getElementById('phase');
   const hint = document.getElementById('live-hint');
+  const loading = document.getElementById('live-loading');
   const start = document.getElementById('start-camera');
   const turn = document.getElementById('turn');
   const defend = document.getElementById('defend');
@@ -26,7 +27,7 @@
     document.getElementById('live-title').textContent = title;
     document.getElementById('eyebrow').textContent = 'FIELD NOTE / EXTRA';
     document.getElementById('intro-text').textContent = '前面カメラに顔と肩を映して変身しよう。顔に耳と頬の模様がつき、ミニモンスターが肩に乗ります。';
-    document.getElementById('engine-label').textContent = 'MindAR.js / 顔追跡 · 0.3.29';
+    document.getElementById('engine-label').textContent = 'MindAR.js / 顔追跡 · 0.3.31';
     document.getElementById('print-link').hidden = true;
     document.getElementById('pose-controls').hidden = true;
     for (const id of ['alternate-link', 'live-alternate']) {
@@ -47,6 +48,7 @@
     turn.disabled = defend.disabled = true;
     intro.hidden = false;
     live.hidden = true;
+    loading.hidden = true;
     status.textContent = message;
     diagnostic.hidden = !events.length;
   }
@@ -64,6 +66,7 @@
     record('start');
     intro.hidden = true;
     live.hidden = false;
+    loading.hidden = false;
     phase.textContent = '起動中';
     hint.textContent = 'カメラを準備しています。Safariの確認が出たら許可してください。';
     camera = document.createElement('iframe');
@@ -117,6 +120,7 @@
     deadline = 0;
     const found = message.kind === 'found';
     tracking = found ? 'found' : 'scanning';
+    loading.hidden = true;
     phase.textContent = found ? (face ? '変身中' : '観察中') : '探しています';
     hint.textContent = found ? foundText : scanText;
     turn.disabled = defend.disabled = !found;
@@ -132,7 +136,7 @@
   defend.addEventListener('click', () => pose('defend'));
   document.getElementById('stop-camera').addEventListener('click', () => stop());
   diagnostic.addEventListener('click', () => {
-    const data={revision:'0.3.29',mode:face?'face':'observation',page:location.href,userAgent:navigator.userAgent,events};
+    const data={revision:'0.3.31',mode:face?'face':'observation',page:location.href,userAgent:navigator.userAgent,events};
     const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
     const link=document.createElement('a');
     link.href=url;
